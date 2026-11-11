@@ -12,6 +12,8 @@
 | --- | --- |
 | `extension/policy.js` | 三站点网址、应用名、表单目的地与提交规则 |
 | `extension/content.js` | 页面识别、原标签页导航、实际填写与提交前复查 |
+| `extension/notice.js` | 学校网页与预览页共用的错误提示样式、页面错误文案 |
+| `extension/preview.*` | 24 种错误状态的独立视觉预览，无凭据通信或登录操作 |
 | `extension/background.js` | 登录状态、提交互斥、失败冷却与工具栏操作 |
 | `extension/credentials.js` | 设置页管理权限、实际文档检查与定向取用凭据 |
 | `extension/native.js` | 有限时长的 Native Messaging 通信与错误说明 |

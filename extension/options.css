@@ -63,7 +63,7 @@ input[role=switch]:checked::before { transform: translateX(16px); }
 .details-content { margin-top: 12px; color: var(--muted); font-size: 12px; }
 .details-content p + p { margin-top: 9px; }
 code { font-size: 11px; overflow-wrap: anywhere; }
-.page-footer { display: flex; gap: 22px; justify-content: space-between; padding: 0 4px; color: #777d8c; font-size: 11px; }
+.page-footer { display: flex; gap: 22px; justify-content: flex-end; padding: 0 4px; color: #777d8c; font-size: 11px; }
 .version { white-space: nowrap; }
 @media (max-width: 560px) {
   .page { padding: 28px 18px 24px; }
@@ -97,3 +97,7 @@ h3 { font-size: 14px; margin: 0 0 16px; font-weight: 600; }
 #install-help { padding: 12px 14px; background: #f0edf8; border: 1px solid #b8acce; border-radius: 9px; }
 #install-help summary { color: #49386d; font-size: 14px; font-weight: 650; }
 #connection-status[data-state=error], .feedback[data-state=error] { padding: 10px 13px; background: #fff3f4; border-left: 4px solid #b84b58; border-radius: 5px; color: #8a3342; }
+
+.copy-button { width: auto; gap: 4px; font-size: 12px; white-space: nowrap; }
+.usage-help summary, .usage-help .details-content, .close-hint { font-size: 13px; }
+.close-hint { margin-top: 21px; padding-top: 15px; border-top: 1px solid #f0eff5; color: var(--muted); }

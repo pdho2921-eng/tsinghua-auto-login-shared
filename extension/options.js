@@ -48,7 +48,7 @@ async function check() {
     $('connection-indicator').textContent = result?.ok ? '已连接' : '需要处理';
     $('connection-indicator').dataset.enabled = String(!!result?.ok);
     $('connection-status').dataset.state = result?.ok ? 'success' : 'error';
-    $('connection-status').textContent = result?.ok ? `本机助手已连接（${result.version}）。可以保存或更新账号密码。` : messageFor(result);
+    $('connection-status').textContent = result?.ok ? `本机助手已连接（助手版本 ${result.version}）。可以保存或更新账号密码。` : messageFor(result);
     $('install-help').open = !result?.ok;
     if (result?.ok) {
       const accounts = result.accounts || {};

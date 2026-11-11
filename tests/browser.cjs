@@ -167,5 +167,29 @@ ${mode === 'mail' ? '<input type="hidden" name="domain" value="mails.tsinghua.ed
     assert.equal(await worker.evaluate(() => !!__testVault.mail), false);
     assert.equal(errors.length, 0, errors.join('\n'));
     console.log('PASS: locked-keychain guidance and credential deletion; no page errors');
+    const preview = await context.newPage();
+    preview.on('pageerror', error => errors.push(error.message));
+    const requestsBeforePreview = await worker.evaluate(() => __testRequests.length);
+    await preview.goto(`chrome-extension://${extensionId}/preview.html`);
+    const choices = await preview.locator('#scenario option').evaluateAll(options => options.map(option => option.value));
+    for (const choice of choices) {
+      await preview.locator('#scenario').selectOption(choice);
+      const notice = preview.locator('#thu-login-helper-message');
+      assert.ok((await notice.innerText()).length > 20, choice);
+      assert.equal(await notice.getByRole('button').count(), choice === 'context-retired' ? 1 : 2);
+    }
+    assert.equal(await worker.evaluate(() => __testRequests.length), requestsBeforePreview);
+    await preview.getByRole('button', {name: '关闭提示'}).click();
+    assert.equal(await preview.locator('#thu-login-helper-message').count(), 0);
+    await preview.getByRole('button', {name: '重新显示'}).click();
+    assert.equal(await preview.locator('#thu-login-helper-message').count(), 1);
+    await preview.locator('#scenario').selectOption('login-error');
+    await preview.setViewportSize({width: 1000, height: 780});
+    await preview.screenshot({path: path.join(output, 'error-preview.png'), fullPage: true});
+    await preview.setViewportSize({width: 390, height: 844});
+    assert.equal(await preview.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await preview.screenshot({path: path.join(output, 'error-preview-mobile.png'), fullPage: true});
+    assert.equal(errors.length, 0, errors.join('\n'));
+    console.log(`PASS: ${choices.length} exact error previews, dismiss and restore, desktop and narrow layouts; no native requests`);
   } finally { await context?.close(); fs.rmSync(profile, {recursive: true, force: true}); }
 })().catch(error => {console.error(error); process.exitCode = 1;});

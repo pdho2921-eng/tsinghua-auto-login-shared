@@ -1,0 +1,7 @@
+.preview-shell { max-width: 670px; margin: 48px; padding-bottom: 300px; }
+.preview-controls { margin-top: 28px; }
+.preview-controls label { display: block; margin-bottom: 9px; font-size: 13px; font-weight: 600; }
+.preview-controls select { width: 100%; padding: 10px 12px; border: 1px solid #c5cbd7; border-radius: 8px; background: white; color: var(--ink); font: inherit; }
+.preview-help { margin-top: 18px; }
+#preview-status { margin-top: 12px; }
+@media (max-width: 560px) { .preview-shell { margin: 24px 18px; } }

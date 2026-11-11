@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "清华网站自动重登 · 共享试用版",
+  "version": "0.1.0",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "description": "自动恢复网络学堂、信息门户和学生邮箱的登录；密码保存在本机系统钥匙串。",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "nativeMessaging",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    },
+    "default_title": "在当前标签页重登此清华网站（右键可打开设置）"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://learn.tsinghua.edu.cn/*",
+        "https://id.tsinghua.edu.cn/do/off/ui/auth/login/*",
+        "https://info.tsinghua.edu.cn/*",
+        "https://mails.tsinghua.edu.cn/*"
+      ],
+      "js": [
+        "policy.js",
+        "native.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "minimum_chrome_version": "106",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3vp8vL1KVrG2E8/pfPMLT4Ugv6F51op4BbLTe2D/kWEhiau+xn65gk4H3Esm2OT2B8NYIgxeJ0m+Gc53aPuexHMtA7rPExaL4iOgB+x03vBi+iAiyZRcNbEBLRnChKgwvd1Q8L5R60NuKNQsaMjALX7fkLXHtDIx8bX1v6nQ91fPG5leOlDAg3YseXL6atm1jZeOYbqkj/svLpweH6IWKjKRPw3LmeNK81LHI6zUDnfmKZfkdK9hx+6tVjh+/ELX33EwYyZyvNR5tc0jEKh3/RB5UMKY28a6U/EwPJBYd/K0150tXQoQCNZ1ystyG/EDHd7/Ms3DLYn+J46hNlux/wIDAQAB",
+  "host_permissions": [
+    "https://learn.tsinghua.edu.cn/*",
+    "https://id.tsinghua.edu.cn/do/off/ui/auth/login/*",
+    "https://info.tsinghua.edu.cn/*",
+    "https://mails.tsinghua.edu.cn/*"
+  ]
+}

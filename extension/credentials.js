@@ -1,0 +1,67 @@
+/* Privileged entry points: settings may mutate credentials, exact login documents may read one. */
+(() => {
+  const roles = new Set(['identity', 'mail']);
+  const failure = error => ({ok: false, error});
+  const sameAccount = (a, b, site) => site === 'mails'
+    ? String(a).replace(/@mails\.tsinghua\.edu\.cn$/i, '') === String(b).replace(/@mails\.tsinghua\.edu\.cn$/i, '')
+    : a === b;
+  const isSettings = (chrome, sender) => sender.id === chrome.runtime.id &&
+    sender.url === chrome.runtime.getURL('options.html') && (sender.frameId === undefined || sender.frameId === 0);
+
+  async function manage(chrome, message, sender) {
+    if (!isSettings(chrome, sender)) return failure('denied');
+    const {op, role} = message;
+    if (op === 'vault-status') return THUNative.call(chrome, {op: 'status'});
+    if (!roles.has(role) || !['vault-save', 'vault-delete'].includes(op)) return failure('invalid-request');
+    if (op === 'vault-save' && (typeof message.username !== 'string' || !message.username.trim() ||
+      message.username.length > 160 || typeof message.password !== 'string' || !message.password || message.password.length > 4096)) return failure('invalid-request');
+    const result = await THUNative.call(chrome, op === 'vault-delete' ? {op: 'delete', role}
+      : {op: 'save', role, username: message.username.trim(), password: message.password});
+    if (result.ok) {
+      // Invalidate any old in-flight attempt when credentials change.
+      await chrome.storage.session.clear();
+      const field = role === 'identity' ? 'username' : 'mailUsername';
+      await chrome.storage.local.set({[field]: op === 'vault-save' ? message.username.trim() : '', pausedSites: {}, retryAfter: 0});
+    }
+    return result;
+  }
+
+  async function inspect(chrome, sender, state, expectedUsername) {
+    const tab = await chrome.tabs.get(sender.tab.id);
+    if (tab.url !== sender.url || tab.pendingUrl) return null;
+    const results = await chrome.scripting.executeScript({
+      target: {tabId: sender.tab.id, documentIds: [sender.documentId]},
+      world: 'ISOLATED',
+      func: (username, site) => globalThis.THUInspect?.({expectedUsername: username, site}) || null,
+      args: [expectedUsername, state.site]
+    });
+    const r = results[0];
+    if (results.length !== 1 || r.frameId !== 0 || r.documentId !== sender.documentId || r.result?.url !== sender.url) return null;
+    return r.result;
+  }
+  async function readForPage(chrome, sender, state, expectedUsername) {
+    if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) ||
+      !sender.documentId || (sender.documentLifecycle && sender.documentLifecycle !== 'active') || !expectedUsername ||
+      state?.status !== 'running' || state.expires <= Date.now() || state.steps.submit ||
+      !['form', 'mail-login'].includes(THU.kind(sender.url))) return failure('denied');
+    try {
+      const before = await inspect(chrome, sender, state, expectedUsername);
+      if (!before || THU.submission(before) !== 'waiting-for-fill') return failure('denied');
+      if (before.username && !sameAccount(before.username.trim(), expectedUsername, state.site)) return failure('wrong-account');
+      const role = state.site === 'mails' ? 'mail' : 'identity';
+      const result = await THUNative.call(chrome, {op: 'get', role});
+      if (!result.ok) return result;
+      if (typeof result.password !== 'string' || !result.password || typeof result.username !== 'string' ||
+        !sameAccount(result.username, expectedUsername, state.site)) return failure('wrong-account');
+      const after = await inspect(chrome, sender, state, expectedUsername);
+      const latest = (await chrome.storage.session.get(`tab:${sender.tab.id}`))[`tab:${sender.tab.id}`];
+      if (!latest || latest.status !== 'running' || latest.expires !== state.expires || latest.steps.submit) return failure('changed-page');
+      if (state.expires <= Date.now() || !after || THU.submission(after) !== 'waiting-for-fill' ||
+        (after.username && !sameAccount(after.username.trim(), expectedUsername, state.site))) return failure('changed-page');
+      // Returned only to the initiating extension content script, never to a page message channel.
+      return {ok: true, username: result.username, password: result.password};
+    } catch { return failure('changed-page'); }
+  }
+  globalThis.THUCredentials = {manage, readForPage};
+  if (typeof module !== 'undefined') module.exports = globalThis.THUCredentials;
+})();

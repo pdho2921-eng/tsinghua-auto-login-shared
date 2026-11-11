@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>清华网站自动重登 · 共享试用版</title>
+  <link rel="icon" href="icons/icon-32.png"><link rel="stylesheet" href="options.css">
+</head>
+<body>
+<main class="page">
+  <header class="masthead">
+    <img class="brand-icon" src="icons/icon.svg" width="64" height="64" alt="">
+    <div><p class="eyebrow">共享试用版 · 首次设置</p><h1>清华网站自动重登</h1>
+    <p class="intro">保存一次账号密码，登录失效后自动回到原网站。</p></div>
+  </header>
+  <ul class="sites" aria-label="支持的网站">
+    <li><img class="site-mark" src="icons/sites/learn.png" alt="">网络学堂</li>
+    <li><img class="site-mark" src="icons/sites/info.ico" alt="">信息门户</li>
+    <li><img class="site-mark" src="icons/sites/mails.ico" alt="">学生邮箱</li>
+  </ul>
+  <section class="card" aria-labelledby="connection-heading">
+    <div class="section-heading heading-with-status">
+      <div><h2 id="connection-heading">1 · 连接本机助手</h2><p>只在首次安装或更新时准备，日常无需手动启动。</p></div>
+      <span id="connection-indicator" class="status-pill">正在检查</span>
+    </div>
+    <p id="connection-status" class="description" role="status" aria-live="polite">正在检查本机助手…</p>
+    <div class="actions"><button id="check" class="button secondary" type="button">检查连接</button></div>
+    <details class="details" id="install-help"><summary>尚未安装或连接失败</summary>
+      <div class="details-content"><ol>
+        <li>解压完整试用包，双击“安装.command”，等待显示安装完成。</li>
+        <li>回到本页点击“检查连接”。安装只需一次。</li>
+        <li>如提示钥匙串锁定，请在 Mac 的“钥匙串访问”中解锁登录钥匙串；如刚更新助手，请重新保存密码。</li>
+      </ol><p>试用阶段支持 Mac＋Chrome。Edge 的连接配置已预留，尚待实机验收。</p></div>
+    </details>
+  </section>
+  <section class="card" aria-labelledby="accounts-heading">
+    <div class="section-heading"><h2 id="accounts-heading">2 · 保存账号密码</h2>
+      <p>密码保存在这台 Mac 的登录钥匙串。登录 Mac 后可自动使用；学校要求验证码等额外验证时，由你在网页完成。</p>
+    </div>
+    <form id="identity-form" class="credential-form" autocomplete="off">
+      <h3>网络学堂与信息门户 <span id="identity-state" class="optional">未保存</span></h3>
+      <div class="fields"><div class="field"><label for="identity-username">清华账号</label>
+        <input id="identity-username" type="text" required maxlength="160" spellcheck="false" autocomplete="off"></div>
+        <div class="field"><label for="identity-password">密码</label>
+        <input id="identity-password" type="password" required maxlength="4096" autocomplete="new-password" placeholder="保存或更新时输入"></div></div>
+      <div class="save-row"><button class="button primary" type="submit">保存此账号</button>
+        <button id="identity-delete" class="button secondary" type="button" disabled>删除已保存密码</button></div>
+      <p id="identity-result" class="feedback" role="status" aria-live="polite"></p>
+    </form>
+    <form id="mail-form" class="credential-form" autocomplete="off">
+      <h3>学生邮箱 <span class="optional">按需配置</span> <span id="mail-state" class="optional">未保存</span></h3>
+      <div class="fields"><div class="field"><label for="mail-username">邮箱账号</label>
+        <input id="mail-username" type="text" required maxlength="160" spellcheck="false" autocomplete="off" placeholder="用户名或完整学生邮箱地址"></div>
+        <div class="field"><label for="mail-password">邮箱密码</label>
+        <input id="mail-password" type="password" required maxlength="4096" autocomplete="new-password" placeholder="输入邮箱对应的密码"></div></div>
+      <div class="save-row"><button class="button primary" type="submit">保存此账号</button>
+        <button id="mail-delete" class="button secondary" type="button" disabled>删除已保存密码</button></div>
+      <p id="mail-result" class="feedback" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+  <section class="card" aria-labelledby="use-heading">
+    <div class="section-heading"><h2 id="use-heading">3 · 开始使用</h2><p>保存所需账号后，刷新对应网站即可开始。</p></div>
+    <label class="toggle-row" for="automatic"><span class="toggle-copy"><strong>自动处理登录失效</strong>
+      <span>关闭后，仍可点击工具栏图标，在当前标签页启动。</span></span><input id="automatic" type="checkbox" role="switch"></label>
+    <p id="mode-result" class="feedback" role="status" aria-live="polite"></p>
+    <div class="actions site-links"><a class="button secondary" href="https://learn.tsinghua.edu.cn/f/wlxt/index/course/student/" target="_blank" rel="noreferrer">打开网络学堂</a>
+      <a class="button secondary" href="https://info.tsinghua.edu.cn/f/info/gxfw_fg/common/index" target="_blank" rel="noreferrer">打开信息门户</a>
+      <a class="button secondary" href="https://mails.tsinghua.edu.cn/" target="_blank" rel="noreferrer">打开学生邮箱</a></div>
+    <details class="details"><summary>密码修改、暂停与卸载</summary><div class="details-content">
+      <p>密码修改后，在上方重新输入并保存。密码框不会回显已保存的密码。</p>
+      <p>主动退出某个网站后，助手会暂停该网站的自动登录。点击工具栏图标可恢复。</p>
+      <p>卸载前可点击上方“删除已保存密码”，再运行试用包中的“卸载.command”，最后在浏览器中移除扩展。</p>
+      <p>密码不会写入浏览器设置、同步存储或日志。填写时，密码会经过本机助手和本扩展，进入对应学校登录页面。</p>
+    </div></details>
+  </section>
+  <footer class="page-footer"><p>仅在支持的网站运行。建议先关闭个人版扩展，避免两个助手同时操作同一页面。</p><span class="version">v0.1.0</span></footer>
+</main>
+<script src="native.js"></script><script src="options.js"></script>
+</body>
+</html>

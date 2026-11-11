@@ -45,7 +45,7 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=BUILD) as temp:
     for name in ['README.md', 'PRIVACY.md']:
         shutil.copy2(ROOT / name, package / name)
     (package / 'docs').mkdir()
-    for name in ['DEVELOPMENT.md', 'VALIDATION.md']:
+    for name in ['DEVELOPMENT.md', 'VALIDATION.md', '界面检查清单.md']:
         shutil.copy2(ROOT / 'docs' / name, package / 'docs' / name)
     archive = DIST / 'tsinghua-auto-login-shared-macos.zip'
     # Explicit UTF-8 filenames and POSIX mode bits, without Finder resource forks.

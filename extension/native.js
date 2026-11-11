@@ -11,7 +11,8 @@
     'invalid-request': '填写内容不完整，请检查账号和密码。',
     'storage-error': '未能访问系统钥匙串，请检查系统授权后重试。',
     'changed-page': '登录页面已变化，请刷新后重试。',
-    'wrong-account': '网页中的账号与已保存账号不一致，请清空网页账号后重试。',
+    'wrong-account': '保存的账号与当前设置不一致，请重新保存账号密码后重试。',
+    'manual-input': '检测到你正在修改登录信息，自动登录已暂停。',
     'denied': '当前页面不符合自动填写条件。'
   };
   async function call(chrome, request) {

@@ -10,7 +10,7 @@
   <header class="masthead">
     <img class="brand-icon" src="icons/icon.svg" width="64" height="64" alt="">
     <div><p class="eyebrow">共享试用版 · 首次设置</p><h1>清华网站自动重登</h1>
-    <p class="intro">保存一次账号密码，登录失效后自动回到原网站。</p></div>
+    <p class="intro">保存一次账号密码，登录失效后自动重新登录并返回原网站。</p></div>
   </header>
   <ul class="sites" aria-label="支持的网站">
     <li><img class="site-mark" src="icons/sites/learn.png" alt="">网络学堂</li>
@@ -19,7 +19,7 @@
   </ul>
   <section class="card" aria-labelledby="connection-heading">
     <div class="section-heading heading-with-status">
-      <div><h2 id="connection-heading">1 · 连接本机助手</h2><p>只在首次安装或更新时准备，日常无需手动启动。</p></div>
+      <div><h2 id="connection-heading">1 · 连接本机助手</h2><p>只需在首次安装或更新时准备，日常无需手动启动。</p></div>
       <span id="connection-indicator" class="status-pill">正在检查</span>
     </div>
     <p id="connection-status" class="description" role="status" aria-live="polite">正在检查本机助手…</p>
@@ -34,24 +34,24 @@
   </section>
   <section class="card" aria-labelledby="accounts-heading">
     <div class="section-heading"><h2 id="accounts-heading">2 · 保存账号密码</h2>
-      <p>密码保存在这台 Mac 的登录钥匙串。登录 Mac 后可自动使用；学校要求验证码等额外验证时，由你在网页完成。</p>
+      <p>密码保存在这台 Mac 的登录钥匙串，登录 Mac 后可自动使用</p>
     </div>
     <form id="identity-form" class="credential-form" autocomplete="off">
       <h3>网络学堂与信息门户 <span id="identity-state" class="optional">未保存</span></h3>
-      <div class="fields"><div class="field"><label for="identity-username">清华账号</label>
+      <div class="fields"><div class="field"><div class="field-label"><label for="identity-username">清华账号</label><button class="icon-button copy-button" type="button" data-copy-from="mail-username" data-copy-to="identity-username" title="从邮箱复制用户名" aria-label="从邮箱复制用户名" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button></div>
         <input id="identity-username" type="text" required maxlength="160" spellcheck="false" autocomplete="off"></div>
-        <div class="field"><label for="identity-password">密码</label>
-        <input id="identity-password" type="password" required maxlength="4096" autocomplete="new-password" placeholder="保存或更新时输入"></div></div>
+        <div class="field"><div class="field-label"><label for="identity-password">密码</label><button class="icon-button copy-button" type="button" data-copy-from="mail-password" data-copy-to="identity-password" title="从邮箱复制密码" aria-label="从邮箱复制密码" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button></div>
+        <div class="input-with-action"><input id="identity-password" type="password" required maxlength="4096" autocomplete="new-password" placeholder="保存或更新时输入"><button class="icon-button reveal-button" type="button" data-reveal="identity-password" aria-label="显示密码" title="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m4 3 16 18"/></svg></button></div></div></div>
       <div class="save-row"><button class="button primary" type="submit">保存此账号</button>
         <button id="identity-delete" class="button secondary" type="button" disabled>删除已保存密码</button></div>
       <p id="identity-result" class="feedback" role="status" aria-live="polite"></p>
     </form>
     <form id="mail-form" class="credential-form" autocomplete="off">
-      <h3>学生邮箱 <span class="optional">按需配置</span> <span id="mail-state" class="optional">未保存</span></h3>
-      <div class="fields"><div class="field"><label for="mail-username">邮箱账号</label>
+      <h3>学生邮箱 <span class="optional">（可选）</span> <span id="mail-state" class="optional">未保存</span></h3>
+      <div class="fields"><div class="field"><div class="field-label"><label for="mail-username">邮箱账号</label><button class="icon-button copy-button" type="button" data-copy-from="identity-username" data-copy-to="mail-username" title="从清华账号复制用户名" aria-label="从清华账号复制用户名" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button></div>
         <input id="mail-username" type="text" required maxlength="160" spellcheck="false" autocomplete="off" placeholder="用户名或完整学生邮箱地址"></div>
-        <div class="field"><label for="mail-password">邮箱密码</label>
-        <input id="mail-password" type="password" required maxlength="4096" autocomplete="new-password" placeholder="输入邮箱对应的密码"></div></div>
+        <div class="field"><div class="field-label"><label for="mail-password">邮箱密码</label><button class="icon-button copy-button" type="button" data-copy-from="identity-password" data-copy-to="mail-password" title="从清华账号复制密码" aria-label="从清华账号复制密码" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button></div>
+        <div class="input-with-action"><input id="mail-password" type="password" required maxlength="4096" autocomplete="new-password" placeholder="输入邮箱对应的密码"><button class="icon-button reveal-button" type="button" data-reveal="mail-password" aria-label="显示密码" title="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m4 3 16 18"/></svg></button></div></div></div>
       <div class="save-row"><button class="button primary" type="submit">保存此账号</button>
         <button id="mail-delete" class="button secondary" type="button" disabled>删除已保存密码</button></div>
       <p id="mail-result" class="feedback" role="status" aria-live="polite"></p>
@@ -60,7 +60,7 @@
   <section class="card" aria-labelledby="use-heading">
     <div class="section-heading"><h2 id="use-heading">3 · 开始使用</h2><p>保存所需账号后，刷新对应网站即可开始。</p></div>
     <label class="toggle-row" for="automatic"><span class="toggle-copy"><strong>自动处理登录失效</strong>
-      <span>关闭后，仍可点击工具栏图标，在当前标签页启动。</span></span><input id="automatic" type="checkbox" role="switch"></label>
+      <span>关闭后，可点击工具栏图标手动执行登录，右键图标选择‘选项’可返回本界面修改设置</span></span><input id="automatic" type="checkbox" role="switch"></label>
     <p id="mode-result" class="feedback" role="status" aria-live="polite"></p>
     <div class="actions site-links"><a class="button secondary" href="https://learn.tsinghua.edu.cn/f/wlxt/index/course/student/" target="_blank" rel="noreferrer">打开网络学堂</a>
       <a class="button secondary" href="https://info.tsinghua.edu.cn/f/info/gxfw_fg/common/index" target="_blank" rel="noreferrer">打开信息门户</a>
@@ -72,7 +72,7 @@
       <p>密码不会写入浏览器设置、同步存储或日志。填写时，密码会经过本机助手和本扩展，进入对应学校登录页面。</p>
     </div></details>
   </section>
-  <footer class="page-footer"><p>仅在支持的网站运行。建议先关闭个人版扩展，避免两个助手同时操作同一页面。</p><span class="version">v0.1.0</span></footer>
+  <footer class="page-footer"><p>完成账号保存后，可关闭当前标签页。助手会按当前设置运行。</p><span class="version">v0.1.1</span></footer>
 </main>
 <script src="native.js"></script><script src="options.js"></script>
 </body>

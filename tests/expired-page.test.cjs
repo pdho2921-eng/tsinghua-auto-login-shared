@@ -1,3 +1,4 @@
+const {contentGlobals, element} = require('./support.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -24,11 +25,11 @@ async function runExpiredPage({href = null, onclick = "top.document.location='/'
     body: {innerText: '您未登录或登录失效\n登录网络学堂\n关闭', append(el) { nodes.set(el.id, el); }},
     querySelectorAll(selector) { return selector === 'a' ? [link, close] : []; },
     getElementById(id) { return nodes.get(id); },
-    createElement() { return {style: {}, textContent: ''}; },
+    createElement: element,
     addEventListener() {}
   };
   const window = {}; window.top = window;
-  const context = vm.createContext({THU: policy, document, window, URL,
+  const context = vm.createContext({...contentGlobals, THU: policy, document, window, URL,
     location: {href: policy.HOME, assign(url) { navigations.push(url); }},
     getComputedStyle() { return {visibility: 'visible'}; },
     setInterval() { return 1; }, clearInterval() {},

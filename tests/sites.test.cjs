@@ -1,8 +1,9 @@
+const {contentGlobals, element} = require('./support.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
 const THU = require('../extension/policy.js');
-const visible = {getClientRects() { return [{}]; }};
+const visible = {dispatchEvent() {}, getClientRects() { return [{}]; }};
 function control(text, click = () => {}) { return {...visible, innerText: text, click}; }
 function dialog(text, buttons) { return {...visible, innerText: text, contains: el => buttons.includes(el), querySelectorAll: () => buttons}; }
 async function run({url, text, dialogs = [], loginControls = [], mailForm = false, password = 'fixture-secret', username = 'fixture-user'} = {}) {
@@ -17,14 +18,15 @@ async function run({url, text, dialogs = [], loginControls = [], mailForm = fals
   const document = {visibilityState: 'visible', body: {get innerText() {return currentText;}, append(el) {notes.set(el.id,el);}},
     querySelectorAll(s) { if (s === '.u-dialog,[role=dialog]') return dialogs; if (s === '.onload') return loginControls;
       if (s === 'input[type=password]') return mailForm ? [pass] : []; if (s === 'input,iframe') return mailForm ? [user,pass] : []; return []; },
-    getElementById: id => notes.get(id), createElement: () => ({style: {}}), addEventListener() {}};
+    getElementById: id => notes.get(id), createElement: element, addEventListener() {}};
   const window = {}; window.top = window;
-  const context = vm.createContext({THU, document, window, URL, Date: {now: () => time},
+  const context = vm.createContext({...contentGlobals, THU, document, window, URL, Date: {now: () => time},
     location: {href: url, assign: u => navigations.push(u), reload: () => navigations.push('reload')},
     setInterval(fn) {interval = fn; return 1;}, clearInterval() {}, getComputedStyle: () => ({visibility: 'visible'}),
     chrome: {runtime: {id: 'fixture-extension', async sendMessage(message) {
       messages.push(message);
       if(message.op === 'begin') return {site: message.site, status: 'running', expectedUsername: 'fixture-user'};
+      if(message.op === 'get-credential') return {ok: true, username: 'fixture-user', password: 'fixture-secret'};
       if(message.op === 'claim') {if(claims.has(message.action)) return false;claims.add(message.action);return true;}
       return true;
     }}}});

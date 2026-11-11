@@ -21,6 +21,13 @@ test('correct filled form is eligible, without passing password contents to poli
   assert.equal(policy.submission(snapshot()), 'submit');
   assert.equal(Object.hasOwn(snapshot(), 'password'), false);
 });
+test('the SSO result route is recognized for feedback but cannot fill or submit', () => {
+  const url = 'https://id.tsinghua.edu.cn/do/off/ui/auth/login/check';
+  assert.equal(policy.kind(url), 'auth-result');
+  assert.equal(policy.siteFor(url, '您即将登录 网络学堂2018'), 'learn');
+  assert.equal(policy.filling({...snapshot(), url}), 'wrong-page');
+  assert.equal(policy.actionAllowed('auth-result', 'submit'), false);
+});
 test('never submit another application, account, challenge or failed login', () => {
   for (const [change, expected] of [
     [{applicationText: '您即将登录 信息门户'}, 'wrong-application'],

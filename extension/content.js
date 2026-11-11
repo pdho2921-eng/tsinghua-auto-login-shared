@@ -3,7 +3,7 @@
   const context = () => ({site: THU.siteFor(location.href, document.body?.innerText || '')});
   let activeSite = context().site;
   let busy = false, finished = false, retired = false, timer;
-  let fillRequested = false, markedDone = false, loggedSince = null;
+  let fillRequested = false, filledByHelper = false, userEdited = false, markedDone = false, loggedSince = null;
   const invalidContext = error => /Extension context invalidated/i.test(error?.message || '');
   function hasRuntime() {
     try { return !!chrome.runtime?.id; } catch { return false; }
@@ -13,6 +13,7 @@
     retired = true; finished = true;
     clearInterval(timer);
     document.removeEventListener('click', handleLogout, true);
+    for (const type of ['beforeinput', 'paste', 'drop', 'keydown']) document.removeEventListener(type, handleEdit, true);
     if (document.body) note('助手扩展已重新加载或停用。请刷新此页面以加载当前版本。');
   }
   async function send(message) {
@@ -35,10 +36,22 @@
     let el = document.getElementById('thu-login-helper-message');
     if (!el) {
       el = document.createElement('div'); el.id = 'thu-login-helper-message';
-      el.style.cssText = 'position:fixed;bottom:18px;right:18px;max-width:360px;padding:14px 18px;background:#fff;color:#222;border:1px solid #bbb;border-radius:9px;box-shadow:0 3px 16px #0002;z-index:2147483647;font:14px/1.6 sans-serif;';
+      el.style.cssText = 'position:fixed;bottom:20px;right:20px;box-sizing:border-box;width:430px;max-width:calc(100vw - 40px);padding:18px 20px;background:#fff7f7;color:#762d35;border:2px solid #b84b58;border-left-width:7px;border-radius:12px;box-shadow:0 8px 32px #42202838;z-index:2147483647;font:14px/1.7 system-ui,sans-serif;text-align:left;';
+      el.setAttribute('role', 'alert'); el.setAttribute('aria-live', 'assertive');
       document.body.append(el);
     }
     el.textContent = message;
+    const title = document.createElement('strong'); title.textContent = '自动登录已暂停';
+    title.style.cssText = 'display:block;font-size:17px;line-height:1.5;margin-bottom:8px;color:#862e3d;';
+    el.prepend(title);
+    const actions = document.createElement('div'); actions.style.cssText = 'display:flex;gap:10px;margin-top:14px;';
+    const settings = document.createElement('button'); settings.type = 'button'; settings.textContent = '打开设置';
+    const close = document.createElement('button'); close.type = 'button'; close.textContent = '关闭提示';
+    for (const button of [settings, close]) button.style.cssText = 'padding:6px 12px;border:1px solid #aeb7c5;border-radius:7px;background:#fff;color:#344357;font:13px/1.6 system-ui;cursor:pointer;';
+    settings.addEventListener('click', () => { void send({op: 'open-settings'}); });
+    close.addEventListener('click', () => el.remove());
+    if (!retired) actions.append(settings);
+    actions.append(close); el.append(actions);
   }
   async function stop(message) {
     if (retired) return;
@@ -66,7 +79,7 @@
     const snapshot = {url: location.href, site: state.site || activeSite, applicationText: THU.authSite(text) === 'learn' ? '您即将登录 网络学堂2018' : THU.authSite(text) === 'info' ? '您即将登录 清华大学信息门户' : '', expectedUsername: state.expectedUsername,
       usernameCount: form.usernames.length, passwordCount: form.passwords.length, buttonCount: form.buttons.length,
       username: form.usernames[0]?.value, passwordReady: !!form.passwords[0]?.value,
-      action: form.action, mailForm: form.mailForm, mailDomain: form.mailDomain, challenge, error};
+      action: form.action, mailForm: form.mailForm, mailDomain: form.mailDomain, challenge, error, userEdited};
     return {form, snapshot, decision: THU.submission(snapshot)};
   }
   // Only extension code in this isolated world can call this inspector. No password value leaves it.
@@ -97,6 +110,14 @@
       const type = THU.kind(location.href);
       const text = document.body?.innerText || '';
       activeSite = THU.siteFor(location.href, text) || activeSite;
+      // The server renders rejected logins at /check. This route can report errors, never autofill or submit.
+      if (type === 'auth-result') {
+        if (!THU.authSite(text)) return;
+        const {snapshot} = assessForm({site: activeSite});
+        if (snapshot.challenge) await stop('学校要求额外验证，请在网页中自行完成。助手已停止，不会重复提交。');
+        else if (snapshot.error) await stop('网页报告登录失败。助手已停止，请核对账号或密码。');
+        return;
+      }
       const mail = type === 'mail-app' ? mailExpiredControls() : null;
       const infoExpired = type === 'info' && /用户未登录[，,]?\s*无权限访问/.test(text);
       const infoLogin = type === 'info' && [...document.querySelectorAll('.onload')].some(el => visible(el) && isLogin(el));
@@ -146,37 +167,41 @@
       if (!['form', 'mail-login'].includes(type)) return;
       // The application label can arrive after document_idle on a dynamic login page.
       if (type === 'form' && !text.includes('您即将登录')) return;
-      const {form, decision} = assessForm(state);
+      const {form, snapshot, decision: submitDecision} = assessForm(state);
+      const decision = filledByHelper ? submitDecision : THU.filling(snapshot);
       const reasons = {
         'challenge': '学校要求额外验证，请在网页中自行完成。助手已停止，不会重复提交。',
         'login-error': '网页报告登录失败。助手已停止，请核对账号或密码。',
         'wrong-account': '填入的账号与助手设置不一致，已停止提交。',
         'wrong-destination': '表单提交地址不符合预期，已停止。',
-        'wrong-application': '当前不是已支持网站的认证表单，助手不会提交。'
+        'wrong-application': '当前不是已支持网站的认证表单，助手不会提交。',
+        'manual-input': THUNative.errors['manual-input']
       };
       if (reasons[decision]) return stop(reasons[decision]);
       if (decision === 'waiting-for-fill' && !fillRequested) {
         fillRequested = true;
         const originalURL = location.href;
         const result = await send({op: 'get-credential'});
-        if (retired) return;
+        if (retired || finished || userEdited) { if (result?.password) result.password = ''; return; }
         if (!result?.ok) return stop(THUNative.errors[result?.error] || '未能取得已保存的密码。请打开扩展设置页检查连接。');
         const current = assessForm(state);
-        if (location.href !== originalURL || document.visibilityState !== 'visible' || current.decision !== 'waiting-for-fill' ||
+        if (location.href !== originalURL || document.visibilityState !== 'visible' || THU.filling(current.snapshot) !== 'waiting-for-fill' ||
           current.form.usernames[0] !== form.usernames[0] || current.form.passwords[0] !== form.passwords[0]) {
           result.password = ''; return stop('填写前页面发生变化，请刷新后重试。');
         }
         setInput(form.usernames[0], result.username);
         const afterUser = assessForm(state);
-        if (location.href !== originalURL || afterUser.decision !== 'waiting-for-fill' || afterUser.form.passwords[0] !== form.passwords[0] ||
+        if (location.href !== originalURL || THU.filling(afterUser.snapshot) !== 'waiting-for-fill' || afterUser.form.passwords[0] !== form.passwords[0] ||
           afterUser.form.usernames[0] !== form.usernames[0] || afterUser.form.usernames[0].value !== result.username) {
           result.password = ''; return stop('填写账号后表单发生变化，请手动检查。');
         }
         setInput(form.passwords[0], result.password);
         result.password = '';
+        filledByHelper = true;
         return;
       }
       if (decision === 'submit' && await send({op: 'claim', action: 'submit'})) {
+        if (retired || finished || userEdited) return;
         const current = assessForm(state);
         if (current.decision !== 'submit' || current.form.buttons[0] !== form.buttons[0]) {
           return stop('提交前页面或填写内容发生变化，助手已停止。请检查后重新启动。');
@@ -193,6 +218,14 @@
       finished = true; clearInterval(timer); void send({op: 'pause'});
     }
   }
+  function handleEdit(event) {
+    if (!event.isTrusted || retired || finished) return;
+    if (event.type === 'keydown' && !(['Backspace', 'Delete', 'Enter'].includes(event.key) || (event.key?.length === 1 && !event.metaKey && !event.ctrlKey))) return;
+    const form = getForm();
+    if (!form.usernames.includes(event.target) && !form.passwords.includes(event.target)) return;
+    userEdited = true;
+    void stop(THUNative.errors['manual-input']);
+  }
   if (!hasRuntime()) { retire(); return; }
   try {
     chrome.runtime.onMessage?.addListener((message, sender, reply) => {
@@ -204,6 +237,7 @@
     throw error;
   }
   document.addEventListener('click', handleLogout, true);
+  for (const type of ['beforeinput', 'paste', 'drop', 'keydown']) document.addEventListener(type, handleEdit, true);
   timer = setInterval(() => { void tick().catch(() => stop('助手遇到页面变化，已停止。请手动登录或反馈当前页面。')); }, 700);
   void tick().catch(() => stop('助手未能识别当前页面，已停止。'));
 })();

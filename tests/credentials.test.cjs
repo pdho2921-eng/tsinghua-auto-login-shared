@@ -37,6 +37,13 @@ test('one exact top-level login document receives only its own credential', asyn
   assert.deepEqual(h.calls, [{op: 'get', role: 'identity'}]);
   assert.equal(h.writes.length, 0);
 });
+test('prefilled student number does not block using the configured login-name credential', async () => {
+  const h = harness();
+  h.snapshot.username = '2099000001';
+  const result = await h.read();
+  assert.equal(result.ok, true, `credential flow stopped: ${result.error}; native requests: ${h.calls.length}`);
+  assert.equal(result.username, 'fixture-user');
+});
 test('untrusted senders, child frames, inactive documents and missing document IDs cannot read', async () => {
   for (const patch of [{id: 'other'}, {frameId: 1}, {documentId: ''}, {documentLifecycle: 'prerender'},
     {url: 'http://id.tsinghua.edu.cn/'}, {url: 'https://id.tsinghua.edu.cn.evil.test/'}]) {
@@ -52,7 +59,7 @@ test('expired, submitted and blocked attempts cannot request credentials', async
 });
 test('background independently rejects wrong application, destination, extra verification and ambiguous form', async () => {
   for (const patch of [{applicationText: '您即将登录 其他应用'}, {action: 'https://evil.test/'},
-    {challenge: true}, {error: true}, {passwordCount: 2}, {username: 'other-user'}, {passwordReady: true, username: 'fixture-user'}]) {
+    {challenge: true}, {error: true}, {passwordCount: 2}, {userEdited: true}]) {
     const h = harness(); Object.assign(h.snapshot, patch);
     assert.equal((await h.read()).ok, false); assert.equal(h.calls.length, 0);
   }
@@ -63,7 +70,7 @@ test('a pending navigation prevents a native read', async () => {
 });
 test('navigation, changed form or cancelled state while native read is pending never returns a password', async () => {
   for (const change of [h => h.setTab({url: 'https://evil.test/'}), h => {h.snapshot.challenge = true;},
-    h => {h.snapshot.action = 'https://evil.test/';}, h => {delete h.session['tab:5'];}]) {
+    h => {h.snapshot.action = 'https://evil.test/';}, h => {h.snapshot.userEdited = true;}, h => {delete h.session['tab:5'];}]) {
     const h = harness(); h.during(() => change(h));
     const r = await h.read(); assert.equal(r.ok, false); assert.equal(r.password, undefined);
   }

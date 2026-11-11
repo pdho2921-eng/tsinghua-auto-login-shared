@@ -26,6 +26,7 @@
     }
     if (u.hostname === 'id.tsinghua.edu.cn') {
       if (/^\/do\/off\/ui\/auth\/login\/form\/[^/]+(?:\/\d+)?\/?$/.test(u.pathname)) return 'form';
+      if (u.pathname === '/do/off/ui/auth/login/check') return 'auth-result';
       if (u.pathname === '/do/off/ui/auth/login/checkSingle') return 'redirect';
     }
     return 'other';
@@ -37,7 +38,7 @@
   function siteFor(value, text = '') {
     const u = trustedURL(value); if (!u) return null;
     const site = {'learn.tsinghua.edu.cn': 'learn', 'info.tsinghua.edu.cn': 'info', 'mails.tsinghua.edu.cn': 'mails'}[u.hostname];
-    return site || (kind(value) === 'form' ? authSite(text) : null);
+    return site || (['form', 'auth-result'].includes(kind(value)) ? authSite(text) : null);
   }
   const isLearnApplication = text => authSite(text) === 'learn';
   const mailAccount = value => String(value || '').trim().replace(/@mails\.tsinghua\.edu\.cn$/i, '');
@@ -66,6 +67,11 @@
     else return null;
     return kind(target.href) === 'entry' ? target.href : null;
   }
+  function filling(snapshot) {
+    // Form ownership and destination still matter; its prefilled account is not our credential source.
+    const decision = submission({...snapshot, username: '', passwordReady: false});
+    return decision === 'waiting-for-fill' && snapshot.userEdited ? 'manual-input' : decision;
+  }
   function actionAllowed(page, action) {
     return ({'expired-link': ['learn'], 'entry-login': ['entry'], 'info-login': ['info'],
       'mail-confirm': ['mail-app'], 'mail-relogin': ['mail-app'], submit: ['form', 'mail-login']})[action]?.includes(page) || false;
@@ -75,7 +81,7 @@
     if (!['expired-link', 'entry-login', 'info-login', 'mail-confirm', 'mail-relogin', 'submit'].includes(action) || state.steps[action]) return null;
     return {...state, steps: {...state.steps, [action]: true}};
   }
-  const api = {HOME, SITES, kind, authSite, siteFor, isLearnApplication, submission, expiredLoginTarget, actionAllowed, claim};
+  const api = {HOME, SITES, kind, authSite, siteFor, isLearnApplication, submission, filling, expiredLoginTarget, actionAllowed, claim};
   globalThis.THU = api;
   if (typeof module !== 'undefined') module.exports = api;
 })();

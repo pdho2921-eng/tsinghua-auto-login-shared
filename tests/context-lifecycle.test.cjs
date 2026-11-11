@@ -1,3 +1,4 @@
+const {contentGlobals, element} = require('./support.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
@@ -5,7 +6,7 @@ const THU = require('../extension/policy.js');
 const flush = () => new Promise(setImmediate);
 const lost = () => new Error('Extension context invalidated.');
 
-function page({send, text = '用户未登录，无权限访问。', register = () => {}} = {}) {
+function page({send, text = '用户未登录，无权限访问。', register = () => {}, url = THU.SITES.info.home} = {}) {
   let interval, cleared = false;
   const messages = [], navigations = [], notes = new Map(), listeners = new Map();
   const runtime = {id: 'fixture-extension', onMessage: {addListener: register}, sendMessage(message) {
@@ -13,13 +14,13 @@ function page({send, text = '用户未登录，无权限访问。', register = (
     return send ? send(message) : Promise.resolve(message.op === 'begin' ? {site: 'info', status: 'running'} : true);
   }};
   const document = {visibilityState: 'visible', body: {innerText: text, append(el) {notes.set(el.id, el);}},
-    querySelectorAll: () => [], getElementById: id => notes.get(id), createElement: () => ({style: {}}),
+    querySelectorAll: () => [], getElementById: id => notes.get(id), createElement: element,
     addEventListener(name, listener) {listeners.set(name, listener);},
     removeEventListener(name, listener) {if (listeners.get(name) === listener) listeners.delete(name);}};
   const window = {}; window.top = window;
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../extension/content.js'), 'utf8'), {
-    THU, window, document, chrome: {runtime}, URL, Date,
-    location: {href: THU.SITES.info.home, assign: url => navigations.push(url)},
+    ...contentGlobals, THU, window, document, chrome: {runtime}, URL, Date,
+    location: {href: url, assign: url => navigations.push(url)},
     setInterval(fn) {interval = fn; return 1;}, clearInterval() {cleared = true;},
     getComputedStyle: () => ({visibility: 'visible'})
   });
@@ -76,4 +77,11 @@ test('a normal message rejection is not labelled as an extension update', async 
   await flush();
   assert.equal(p.note, '');
   assert.deepEqual(p.navigations, []);
+});
+test('the real SSO rejection route shows an alert without fetching or resubmitting credentials', async () => {
+  const p = page({url: 'https://id.tsinghua.edu.cn/do/off/ui/auth/login/check', text: '您即将登录 网络学堂2018\n您的用户名或密码不正确，请重试！'});
+  await flush();
+  assert.match(p.note, /登录失败/);
+  assert.deepEqual(p.messages.map(m => m.op), ['stop']);
+  assert.equal(p.cleared, true);
 });

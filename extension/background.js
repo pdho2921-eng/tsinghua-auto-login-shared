@@ -15,15 +15,16 @@ async function handle(message, sender) {
   if (!message || typeof message.op !== 'string') return null;
   if (message.op.startsWith('vault-')) return THUCredentials.manage(chrome, message, sender);
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !sender.tab || THU.kind(sender.url) === 'other') return null;
+  if (message.op === 'open-settings') { await chrome.runtime.openOptionsPage(); return true; }
   const tabId = sender.tab.id, storageKey = key(tabId);
   const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: false, paused: false, pausedSites: {}, retryAfter: 0});
   const stored = await chrome.storage.session.get(storageKey);
   let state = stored[storageKey];
   const page = THU.kind(sender.url);
-  const site = THU.siteFor(sender.url) || (page === 'form' && ['learn', 'info'].includes(message.site) ? message.site : null);
+  const site = THU.siteFor(sender.url) || (['form', 'auth-result'].includes(page) && ['learn', 'info'].includes(message.site) ? message.site : null);
   // Identity forms must stay bound to the application that began this attempt.
   if (state && site && (state.site || 'learn') !== site) {
-    if (page === 'form' && state.status === 'running') return null;
+    if (['form', 'auth-result'].includes(page) && state.status === 'running') return null;
     state = null;
   }
   if (message.op === 'get-credential') {
@@ -92,7 +93,7 @@ chrome.action.onClicked.addListener(tab => serial(async () => {
   let context;
   try { context = await chrome.tabs.sendMessage(tab.id, {op: 'site-context'}, {frameId: 0}); } catch { /* Page may predate extension reload. */ }
   let site = (Object.hasOwn(THU.SITES, context?.site || '') && context.site) || THU.siteFor(tab.url);
-  if (!site && ['form', 'redirect'].includes(THU.kind(tab.url))) {
+  if (!site && ['form', 'auth-result', 'redirect'].includes(THU.kind(tab.url))) {
     const saved = (await chrome.storage.session.get(key(tab.id)))[key(tab.id)];
     if (Object.hasOwn(THU.SITES, saved?.site || '')) site = saved.site;
     else { await badge(tab.id, '', '认证页面仍在加载；请稍后再次点击'); return; }

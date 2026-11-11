@@ -1,6 +1,38 @@
 const $ = id => document.getElementById(id);
 const roles = ['identity', 'mail'];
 let checking = false;
+const configured = {identity: false, mail: false};
+function syncFieldTools() {
+  for (const button of document.querySelectorAll('[data-copy-from]')) {
+    button.disabled = !$(button.dataset.copyFrom).value || $(button.dataset.copyTo).disabled;
+  }
+  for (const button of document.querySelectorAll('[data-reveal]')) {
+    const input = $(button.dataset.reveal);
+    button.disabled = !input.value || input.disabled;
+    if (!input.value) {
+      input.type = 'password'; button.setAttribute('aria-pressed', 'false');
+      button.title = '显示密码'; button.setAttribute('aria-label', '显示密码');
+    }
+  }
+  for (const role of roles) $(`${role}-delete`).disabled = !configured[role] || $(`${role}-form`).dataset.busy === 'true';
+}
+for (const button of document.querySelectorAll('[data-copy-from]')) {
+  button.addEventListener('click', () => {
+    const target = $(button.dataset.copyTo);
+    target.value = $(button.dataset.copyFrom).value;
+    target.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+}
+for (const button of document.querySelectorAll('[data-reveal]')) {
+  button.addEventListener('click', () => {
+    const input = $(button.dataset.reveal), showing = input.type === 'password';
+    input.type = showing ? 'text' : 'password';
+    button.setAttribute('aria-pressed', String(showing));
+    button.title = showing ? '隐藏密码' : '显示密码';
+    button.setAttribute('aria-label', button.title);
+  });
+}
+for (const input of document.querySelectorAll('.fields input')) input.addEventListener('input', syncFieldTools);
 const messageFor = result => THUNative.errors[result?.error] || '操作未完成，请检查本机助手连接后重试。';
 async function send(message) {
   try { return await chrome.runtime.sendMessage(message); }
@@ -9,24 +41,27 @@ async function send(message) {
 async function check() {
   if (checking) return;
   checking = true; $('check').disabled = true;
+  $('check').setAttribute('aria-busy', 'true');
   $('connection-status').textContent = '正在检查本机助手…';
   try {
     const result = await send({op: 'vault-status'});
     $('connection-indicator').textContent = result?.ok ? '已连接' : '需要处理';
     $('connection-indicator').dataset.enabled = String(!!result?.ok);
+    $('connection-status').dataset.state = result?.ok ? 'success' : 'error';
     $('connection-status').textContent = result?.ok ? `本机助手已连接（${result.version}）。可以保存或更新账号密码。` : messageFor(result);
     $('install-help').open = !result?.ok;
     if (result?.ok) {
       const accounts = result.accounts || {};
       for (const role of roles) {
         const account = accounts[role];
+        configured[role] = !!account?.configured;
         if (!$(`${role}-username`).value) $(`${role}-username`).value = account?.username || '';
         $(`${role}-state`).textContent = account?.configured ? '已保存' : '未保存';
         $(`${role}-delete`).disabled = !account?.configured;
       }
       await chrome.storage.local.set({username: accounts.identity?.username || '', mailUsername: accounts.mail?.username || ''});
     }
-  } finally { checking = false; $('check').disabled = false; }
+  } finally { checking = false; $('check').disabled = false; $('check').removeAttribute('aria-busy'); syncFieldTools(); }
 }
 $('check').addEventListener('click', check);
 for (const role of roles) {
@@ -36,22 +71,32 @@ for (const role of roles) {
     const username = $(`${role}-username`).value.trim();
     const passwordField = $(`${role}-password`);
     controls.forEach(el => { el.disabled = true; });
+    form.dataset.busy = 'true';
+    form.querySelector('[type=submit]').setAttribute('aria-busy', 'true');
     $(`${role}-result`).textContent = '正在保存到登录钥匙串…';
     try {
       const request = {op: 'vault-save', role, username, password: passwordField.value};
       passwordField.value = '';
+      syncFieldTools();
       const pending = send(request); request.password = '';
       const result = await pending;
       $(`${role}-result`).textContent = result?.ok ? '已保存。刷新对应网站，或点击工具栏图标开始。' : messageFor(result);
+      $(`${role}-result`).dataset.state = result?.ok ? 'success' : 'error';
       if (result?.ok) await chrome.storage.local.set({automatic: $('automatic').checked, paused: false, pausedSites: {}, retryAfter: 0});
-    } finally { controls.forEach(el => { el.disabled = false; }); await check(); }
+    } finally {
+      form.dataset.busy = 'false'; form.querySelector('[type=submit]').removeAttribute('aria-busy');
+      controls.forEach(el => { el.disabled = false; }); syncFieldTools(); await check();
+    }
   });
   $(`${role}-delete`).addEventListener('click', async () => {
     if (!confirm('删除本机保存的此账号密码？对应网站将停止自动登录。')) return;
     $(`${role}-delete`).disabled = true;
+    $(`${role}-delete`).setAttribute('aria-busy', 'true');
     const result = await send({op: 'vault-delete', role});
     if (result?.ok) $(`${role}-username`).value = '';
     $(`${role}-result`).textContent = result?.ok ? '已从登录钥匙串删除。' : messageFor(result);
+    $(`${role}-result`).dataset.state = result?.ok ? 'success' : 'error';
+    $(`${role}-delete`).removeAttribute('aria-busy');
     await check();
   });
 }
@@ -59,7 +104,8 @@ $('automatic').addEventListener('change', async () => {
   const automatic = $('automatic').checked;
   await chrome.storage.local.set({automatic, pausedSites: {}, retryAfter: 0});
   await chrome.storage.session.clear();
-  $('mode-result').textContent = automatic ? '已开启。请刷新需要登录的网页。' : '已关闭自动模式。当前流程会停止；仍可点击工具栏图标手动启动。';
+  $('mode-result').textContent = automatic ? '已开启。请刷新需要登录的网页。' : '已关闭自动模式。可点击工具栏图标手动执行登录，右键图标选择‘选项’可返回本界面修改设置';
 });
 void chrome.storage.local.get({automatic: true}).then(settings => { $('automatic').checked = settings.automatic; });
 void check();
+syncFieldTools();

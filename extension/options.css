@@ -44,10 +44,11 @@ input[role=switch]:checked::before { transform: translateX(16px); }
 .save-row { display: flex; align-items: center; gap: 16px; margin-top: 22px; }
 .button { border: 1px solid transparent; border-radius: 9px; padding: 9px 18px; line-height: 1.5; font-size: 13px; font-weight: 550; cursor: pointer; flex-shrink: 0; transition: background .15s, border-color .15s; }
 .primary { background: var(--button); color: #fff; }
-.primary:hover { background: #243346; }
+.primary:hover:not(:disabled) { background: #243346; }
 .secondary { background: #fff; border-color: #dce0e7; color: #435166; }
-.secondary:hover { background: #f4f6f9; border-color: #b6c0ce; }
-.button:disabled { opacity: .55; cursor: wait; }
+.secondary:hover:not(:disabled) { background: #f4f6f9; border-color: #b6c0ce; }
+.button:disabled, .icon-button:disabled { opacity: .4; cursor: default; }
+.button[aria-busy=true] { cursor: progress; }
 .heading-with-status { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 16px; }
 .status-pill { display: inline-flex; gap: 6px; align-items: center; font-size: 11px; border: 1px solid #e2e6ec; color: #657083; background: #f5f7f9; border-radius: 20px; padding: 3px 10px; white-space: nowrap; }
 .status-pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #9ba5b4; }
@@ -83,3 +84,16 @@ h3 { font-size: 14px; margin: 0 0 16px; font-weight: 600; }
 .site-links a { text-decoration: none; }
 .details-content ol { padding-left: 20px; }
 .details-content li + li { margin-top: 8px; }
+.field-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.field-label label { margin-bottom: 0; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; padding: 5px; width: 29px; height: 29px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #536079; cursor: pointer; flex: 0 0 auto; }
+.icon-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.icon-button:hover:not(:disabled) { background: #eeedf6; border-color: #dedbe9; color: #4e3b85; }
+.input-with-action { position: relative; }
+.input-with-action input { padding-right: 42px; }
+.reveal-button { position: absolute; right: 7px; top: 7px; }
+.eye-slash { display: none; }
+[aria-pressed=true] .eye-slash { display: block; }
+#install-help { padding: 12px 14px; background: #f0edf8; border: 1px solid #b8acce; border-radius: 9px; }
+#install-help summary { color: #49386d; font-size: 14px; font-weight: 650; }
+#connection-status[data-state=error], .feedback[data-state=error] { padding: 10px 13px; background: #fff3f4; border-left: 4px solid #b84b58; border-radius: 5px; color: #8a3342; }

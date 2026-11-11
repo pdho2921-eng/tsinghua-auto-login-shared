@@ -46,8 +46,9 @@
       !['form', 'mail-login'].includes(THU.kind(sender.url))) return failure('denied');
     try {
       const before = await inspect(chrome, sender, state, expectedUsername);
-      if (!before || THU.submission(before) !== 'waiting-for-fill') return failure('denied');
-      if (before.username && !sameAccount(before.username.trim(), expectedUsername, state.site)) return failure('wrong-account');
+      if (!before) return failure('denied');
+      if (THU.filling(before) === 'manual-input') return failure('manual-input');
+      if (THU.filling(before) !== 'waiting-for-fill') return failure('denied');
       const role = state.site === 'mails' ? 'mail' : 'identity';
       const result = await THUNative.call(chrome, {op: 'get', role});
       if (!result.ok) return result;
@@ -56,8 +57,8 @@
       const after = await inspect(chrome, sender, state, expectedUsername);
       const latest = (await chrome.storage.session.get(`tab:${sender.tab.id}`))[`tab:${sender.tab.id}`];
       if (!latest || latest.status !== 'running' || latest.expires !== state.expires || latest.steps.submit) return failure('changed-page');
-      if (state.expires <= Date.now() || !after || THU.submission(after) !== 'waiting-for-fill' ||
-        (after.username && !sameAccount(after.username.trim(), expectedUsername, state.site))) return failure('changed-page');
+      if (after && THU.filling(after) === 'manual-input') return failure('manual-input');
+      if (state.expires <= Date.now() || !after || THU.filling(after) !== 'waiting-for-fill') return failure('changed-page');
       // Returned only to the initiating extension content script, never to a page message channel.
       return {ok: true, username: result.username, password: result.password};
     } catch { return failure('changed-page'); }

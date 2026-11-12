@@ -4,9 +4,15 @@
 
 用户已确认 Windows 11、Intel x64、Edge；由同学在 Windows 电脑测试，用户转交安装包。采用当前用户 DPAPI，不缩小协议密码长度。保留现有设置页布局，仅替换必需的平台说明。Mac 与 Windows 分别分发，安装包仅含相应系统的文件。
 
-Windows 助手版本与 Windows 扩展版本独立记录在 `native/windows/config.json`。`native/config.json` 仍记录共享主机名、扩展 ID、协议，以及 Mac 助手版本。当前 Windows 扩展为 0.1.7，Windows 助手为 0.1.0；Mac 已交付包继续使用扩展 0.1.6、助手 0.1.3，通信协议仍为 1。用户最新要求本轮不修改 Mac 包。Windows 构建按平台覆盖 manifest 与页尾版本；共用源码的 Mac 分支保留既有行为。
+Windows 助手版本与 Windows 扩展版本独立记录在 `native/windows/config.json`。`native/config.json` 仍记录共享主机名、扩展 ID、协议，以及 Mac 助手版本。当前 Windows 扩展 0.1.9、助手 0.1.2；Mac 扩展 0.1.8、助手 0.1.4，通信协议仍为 1。用户最新要求同步 Mac 的设置页登录入口，并检查两版升级行为；之前 0.1.7 仅改 Windows 的限制已被这次请求替代。
 
-0.1.7 的 Windows 设置页首次连接成功与手动检查成功都会显示浮动提示，保存／删除后的后台检查保持安静。三个网站链接发送受限的 `open-site` 请求，只允许 Windows 设置页的精确来源和顶层页面使用，拒绝任意 URL。后台先创建空白标签页并保存一次手动尝试，再导航到固定网站入口，避免快速重定向先遇到旧冷却状态。主动启动不修改自动开关、退出暂停或普通自动尝试的等待时间；不抢占其他标签页的提交占用。失败时清理空白标签页和状态，并向设置页明确返回错误。
+从 0.1.8 起，两版设置页首次连接成功与手动检查成功都会显示浮动提示，保存／删除后的后台检查保持安静。三个网站链接发送受限的 `open-site` 请求，只允许设置页的精确来源和顶层页面使用，拒绝任意 URL 和非字符串的网站编号。后台先创建空白标签页并保存一次手动尝试，再导航到固定网站入口，避免快速重定向先遇到旧冷却状态。主动启动不修改自动开关、退出暂停或普通自动尝试的等待时间；不抢占其他标签页的提交占用。失败时清理空白标签页和状态，并向设置页明确返回错误。
+
+两版原本已支持覆盖旧安装。Windows 0.1.1 增加 `SetupErrors`：失败恢复后的提示保留具体阶段、异常类型和 HRESULT；区分共享冲突、访问拒绝、校验失败和恢复失败，不能把访问拒绝直接认定为浏览器占用。安装成功时区分首次安装与覆盖更新，更新不要求重新保存账号。没有自动结束浏览器进程、改写浏览器用户资料或删除凭据。
+
+Windows 0.1.2 针对实机截图“替换旧版本文件 / IOException / 80070005”修复目录替换依赖。当旧目录移动返回访问拒绝或共享冲突，且目录仍完整位于原位置时，切换到逐文件更新。每个差异文件先备份，再将恢复记录落盘，最后以文件替换操作切换；一致文件跳过。提交后清理无用旧文件，被占用的无用文件可以延后清理。失败或下次启动按新日志恢复每个改动文件和注册表；旧版整目录事务仍可恢复。没有绕过文件访问权限，单文件写入被拒绝时仍停止并保留具体错误。
+
+新增覆盖：旧目录移动固定返回 80070005 时升级成功；逐文件模式的起始、已有文件、新文件、助手文件及注册表失败恢复；实际生成的日志在模拟进程中断后的恢复。Windows 专用检查额外持有不允许删除共享的真实目录句柄，以及锁定旧助手文件；这些检查只会在 Windows 上执行，Mac 上的注入检查不能替代它们。
 
 连续登录回归见 `tests/settings-launch.browser.cjs`，测试使用虚拟学校页面和虚拟密码，依次完成网络学堂、信息门户、邮箱、再次网络学堂，均在二次验证处停止并关闭标签页。网站之间不清空状态。它补上了此前逐站测试清除状态而遗漏的路径。
 
@@ -41,7 +47,7 @@ dotnet run --project native/windows/Tests/Tests.csproj -c Release -- --payload b
 node --test tests/*.test.cjs
 ```
 
-浏览器回归需安装 `playwright-core` 及其 Chromium。将 `build/windows/payload.zip` 解压到 `build/windows/acceptance-payload`，指定其中的 Windows 扩展副本；不要用根目录仍标为 Mac 0.1.6 的源副本代替待交付文件：
+浏览器回归需安装 `playwright-core` 及其 Chromium。将 `build/windows/payload.zip` 解压到 `build/windows/acceptance-payload`，指定其中的 Windows 扩展副本；用实际打包副本核对平台文案与交付版本：
 
 ```sh
 THU_TEST_EXTENSION="$PWD/build/windows/acceptance-payload/extension" node tests/settings-launch.browser.cjs all

@@ -76,9 +76,10 @@ function background(local = storage({username: 'test-user', mailUsername: 'test-
 }
 const sender = (tab = 1, url = policy.HOME) => ({id: 'test-extension', frameId: 0, tab: {id: tab}, url});
 const settingsSender = () => sender(5, 'chrome-extension://test-extension/options.html');
-test('Windows settings starts one explicit login after 2FA without lifting the ordinary automatic cooldown', async () => {
+test('both platforms start one explicit login after 2FA without lifting the ordinary automatic cooldown', async () => {
+  for (const isWindows of [false, true])
   for (const site of Object.keys(policy.SITES)) {
-    const worker = background(undefined, undefined, null, null, true);
+    const worker = background(undefined, undefined, null, null, isWindows);
     await worker.handle({op: 'begin', site: 'learn'}, sender(1, FORM));
     assert.equal(await worker.handle({op: 'claim', action: 'submit', site: 'learn'}, sender(1, FORM)), true);
     await worker.handle({op: 'stop', site: 'learn'}, sender(1, FORM));
@@ -109,16 +110,13 @@ test('settings launch state exists before school navigation and does not take an
   assert.equal(await worker.handle({op: 'claim', site: 'learn', action: 'submit'}, sender(99, FORM)), false);
   assert.equal(worker.session.values.submitting.tabId, 8);
 });
-test('settings launch rejects pages, frames, arbitrary destinations and stays unavailable on Mac', async () => {
+test('settings launch rejects pages, frames, arbitrary destinations and malformed site IDs', async () => {
   const worker = background(undefined, undefined, null, null, true);
   for (const untrusted of [sender(), {...settingsSender(), frameId: 1}, {...settingsSender(), id: 'foreign'}, sender(5, 'chrome-extension://test-extension/preview.html')])
     assert.equal((await worker.handle({op: 'open-site', site: 'learn'}, untrusted)).ok, false);
-  for (const message of [{op:'open-site',site:'other'}, {op:'open-site',site:'learn',url:'https://other.test/'}, {op:'open-site',site:'__proto__'}])
+  for (const message of [{op:'open-site',site:'other'}, {op:'open-site',site:'learn',url:'https://other.test/'}, {op:'open-site',site:'__proto__'}, {op:'open-site',site:['learn']}])
     assert.equal((await worker.handle(message, settingsSender())).ok, false);
   assert.equal(worker.created.length, 0);
-  const mac = background();
-  assert.equal((await mac.handle({op: 'open-site', site: 'learn'}, settingsSender())).ok, false);
-  assert.equal(mac.created.length, 0);
 });
 test('missing credentials and failed opening leave no blank tab or login state', async () => {
   const empty = background(storage({username:'',mailUsername:''}), undefined, null, null, true);

@@ -65,7 +65,7 @@ public static class Package
                 throw new IOException("暂存文件校验失败。");
         }
     }
-    static bool SafeName(string name) => name.Length is > 0 and < 240 && !name.Contains('\\') &&
+    internal static bool SafeName(string name) => name.Length is > 0 and < 240 && !name.Contains('\\') &&
         name.Split('/').All(p => p.Length > 0 && p is not "." and not ".." && !p.EndsWith('.') && !p.EndsWith(' ') &&
             !p.Any(c => c < 32 || ":*?\"<>|".Contains(c)) &&
             !new[] { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" }.Contains(p.Split('.')[0], StringComparer.OrdinalIgnoreCase));
@@ -73,14 +73,17 @@ public static class Package
 
 // The entry point supplies only fixed application paths. Injectable storage/registrations
 // allow rollback tests without touching the developer's browser or real credentials.
-public sealed class Installation(string destination, IRegistrations registrations, Action<string>? checkpoint = null)
+public sealed class Installation(string destination, IRegistrations registrations, Action<string>? checkpoint = null,
+    Action<string, string>? moveDirectory = null)
 {
     public string Destination { get; } = Path.GetFullPath(destination);
+    public string Phase { get; private set; } = "检查已有安装";
     string Transaction => Destination + ".transaction";
     string Next => Path.Combine(Transaction, "next");
     string Previous => Path.Combine(Transaction, "previous");
     string Journal => Path.Combine(Transaction, "journal.json");
     public string Manifest => Path.Combine(Destination, BuildInfo.Host + ".json");
+    sealed record FileChange(string Path, bool Existed);
     void Step(string step) => checkpoint?.Invoke(step);
 
     static void CheckTree(string path)
@@ -117,7 +120,8 @@ public sealed class Installation(string destination, IRegistrations registration
             throw new IOException("浏览器连接配置指向其他程序，已停止操作。");
         return snapshot;
     }
-    void WriteJournal(Registration[] snapshot, bool oldExists, bool committed)
+    void WriteJournal(Registration[] snapshot, bool oldExists, bool committed,
+        List<FileChange>? files = null, string[]? obsolete = null)
     {
         var bytes = Protocol.Json(w =>
         {
@@ -125,7 +129,17 @@ public sealed class Installation(string destination, IRegistrations registration
             w.WriteBoolean("oldExists", oldExists); w.WriteBoolean("committed", committed); w.WriteStartArray("registrations");
             foreach (var item in snapshot)
             { w.WriteStartObject(); w.WriteBoolean("exists", item.Exists); w.WriteString("value", item.Value); w.WriteEndObject(); }
-            w.WriteEndArray(); w.WriteEndObject();
+            w.WriteEndArray();
+            if (files != null)
+            {
+                w.WriteBoolean("inPlace", true); w.WriteStartArray("files");
+                foreach (var file in files)
+                { w.WriteStartObject(); w.WriteString("path", file.Path); w.WriteBoolean("existed", file.Existed); w.WriteEndObject(); }
+                w.WriteEndArray(); w.WriteStartArray("obsolete");
+                foreach (var name in obsolete ?? []) w.WriteStringValue(name);
+                w.WriteEndArray();
+            }
+            w.WriteEndObject();
         });
         var temporary = Journal + ".new";
         using (var file = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
@@ -140,6 +154,15 @@ public sealed class Installation(string destination, IRegistrations registration
         using var json = JsonDocument.Parse(File.ReadAllBytes(Journal)); var root = json.RootElement;
         if (root.GetProperty("host").GetString() != BuildInfo.Host || root.GetProperty("destination").GetString() != Destination)
             throw new IOException("安装恢复信息无效，请保留并反馈：" + Transaction);
+        bool inPlace = root.TryGetProperty("inPlace", out var mode) && mode.GetBoolean();
+        var files = inPlace ? root.GetProperty("files").EnumerateArray()
+            .Select(v => new FileChange(v.GetProperty("path").GetString()!, v.GetProperty("existed").GetBoolean())).ToArray() : [];
+        var obsolete = inPlace ? root.GetProperty("obsolete").EnumerateArray().Select(v => v.GetString()!).ToArray() : [];
+        if (inPlace && (!root.GetProperty("oldExists").GetBoolean() ||
+            files.Select(v => v.Path).Concat(obsolete).Any(n => n == null || !Package.SafeName(n)) ||
+            files.Select(v => v.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Length ||
+            files.Select(v => v.Path).Intersect(obsolete, StringComparer.OrdinalIgnoreCase).Any()))
+            throw new IOException("逐文件更新的恢复信息无效，已停止操作。");
         if (!root.GetProperty("committed").GetBoolean())
         {
             var snapshot = root.GetProperty("registrations").EnumerateArray()
@@ -152,7 +175,27 @@ public sealed class Installation(string destination, IRegistrations registration
                 !string.Equals(v.Value, Manifest, StringComparison.OrdinalIgnoreCase) &&
                 !(v.Value == null && !snapshot[index].Exists)).Any())
                 throw new IOException("连接配置在安装中途被其他程序更改，请保留并反馈：" + Transaction);
-            if (Directory.Exists(Previous))
+            if (inPlace)
+            {
+                CheckOwned(Destination);
+                foreach (var file in files.Reverse())
+                {
+                    var target = Path.Combine(Destination, file.Path);
+                    if (file.Existed)
+                    {
+                        var backup = Path.Combine(Previous, file.Path);
+                        if (!File.Exists(backup)) throw new IOException("更新备份缺失，请保留并反馈：" + Transaction);
+                        // A failed replacement may have left the original untouched.
+                        // Do not try to replace that same, possibly locked, file again.
+                        if (SameFile(backup, target)) continue;
+                        var restore = Path.Combine(Transaction, "restore-" + Guid.NewGuid().ToString("N"));
+                        File.Copy(backup, restore);
+                        File.Move(restore, target, true);
+                    }
+                    else if (File.Exists(target)) File.Delete(target);
+                }
+            }
+            else if (Directory.Exists(Previous))
             {
                 CheckOwned(Previous); CheckOwned(Destination);
                 if (Directory.Exists(Destination)) Directory.Delete(Destination, true);
@@ -162,13 +205,64 @@ public sealed class Installation(string destination, IRegistrations registration
             { CheckOwned(Destination); Directory.Delete(Destination, true); }
             for (int i = 0; i < snapshot.Length; i++) registrations.Set(i, snapshot[i]);
         }
+        else if (inPlace)
+        {
+            CheckOwned(Destination);
+            // Obsolete resources are no longer referenced by the new manifest.
+            // A still-running old helper may keep its file open until it exits.
+            foreach (var name in obsolete)
+                try { File.Delete(Path.Combine(Destination, name)); }
+                catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
         Directory.Delete(Transaction, true);
     }
-    static void RetryMove(string source, string target)
+    static bool SameFile(string first, string second)
+    {
+        if (!File.Exists(first) || !File.Exists(second) || new FileInfo(first).Length != new FileInfo(second).Length) return false;
+        using var a = File.OpenRead(first); using var b = File.OpenRead(second);
+        return SHA256.HashData(a).SequenceEqual(SHA256.HashData(b));
+    }
+    static bool CanUpdateInPlace(Exception error) => error.HResult is unchecked((int)0x80070005)
+        or unchecked((int)0x80070020) or unchecked((int)0x80070021);
+    (List<FileChange> Files, string[] Obsolete) UpdateFiles(Registration[] snapshot)
+    {
+        CheckOwned(Destination);
+        var names = Directory.GetFiles(Next, "*", SearchOption.AllDirectories)
+            .Select(p => Path.GetRelativePath(Next, p).Replace('\\', '/')).Order(StringComparer.Ordinal).ToArray();
+        var obsolete = Directory.GetFiles(Destination, "*", SearchOption.AllDirectories)
+            .Select(p => Path.GetRelativePath(Destination, p).Replace('\\', '/'))
+            .Except(names, StringComparer.OrdinalIgnoreCase).ToArray();
+        if (obsolete.Any(n => !Package.SafeName(n))) throw new IOException("旧安装中存在无法安全处理的额外文件，已停止更新。");
+        var files = new List<FileChange>();
+        // Record the mode before creating a partial backup; legacy recovery expects
+        // `previous` to be a whole directory, whereas this mode restores each file.
+        WriteJournal(snapshot, true, false, files, obsolete);
+        Step("in-place-started");
+        foreach (var name in names)
+        {
+            Phase = "更新文件：" + name;
+            var source = Path.Combine(Next, name); var target = Path.Combine(Destination, name);
+            if (SameFile(source, target)) continue;
+            bool existed = File.Exists(target);
+            if (existed)
+            {
+                var backup = Path.Combine(Previous, name);
+                Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                File.Copy(target, backup);
+            }
+            files.Add(new FileChange(name, existed));
+            WriteJournal(snapshot, true, false, files, obsolete);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Move(source, target, true);
+            Step("in-place-file:" + name);
+        }
+        return (files, obsolete);
+    }
+    void RetryMove(string source, string target)
     {
         for (int attempt = 0; ; attempt++)
         {
-            try { Directory.Move(source, target); return; }
+            try { (moveDirectory ?? Directory.Move)(source, target); return; }
             catch (IOException) when (attempt < 8) { Thread.Sleep(250); }
         }
     }
@@ -181,16 +275,20 @@ public sealed class Installation(string destination, IRegistrations registration
     void Rollback(Exception original)
     {
         try { Recover(); }
-        catch { throw new IOException("操作未完成，旧文件与恢复信息已保留。请关闭浏览器后重试；如仍失败，请反馈此路径：" + Transaction, original); }
-        throw new IOException("操作未完成，已恢复原来的安装和连接配置。请关闭浏览器后重试。", original);
+        catch (Exception recovery) { throw new SetupFailure(Phase,
+            "旧文件与恢复信息已保留，请勿删除：" + Transaction + "\n恢复诊断代码：" + SetupErrors.Code(recovery), original); }
+        throw new SetupFailure(Phase, "已恢复原来的安装和连接配置。原有账号密码未改动。", original);
     }
     public void Install(byte[] payload, string hash)
     {
-        Recover(); var snapshot = Preflight(); bool oldExists = Directory.Exists(Destination);
+        Phase = "恢复上次未完成的操作"; Recover();
+        Phase = "检查已有安装和连接配置"; var snapshot = Preflight(); bool oldExists = Directory.Exists(Destination);
+        Phase = "创建安装暂存目录";
         Begin(snapshot, oldExists);
+        List<FileChange>? files = null; string[]? obsolete = null;
         try
         {
-            Package.Extract(payload, hash, Next); Step("staged");
+            Phase = "校验并解压新安装包"; Package.Extract(payload, hash, Next); Step("staged");
             File.WriteAllBytes(Path.Combine(Next, "installation.json"), Protocol.Json(w =>
             { w.WriteStartObject(); w.WriteString("host", BuildInfo.Host); w.WriteString("extensionId", BuildInfo.ExtensionId); w.WriteEndObject(); }));
             File.WriteAllBytes(Path.Combine(Next, BuildInfo.Host + ".json"), Protocol.Json(w =>
@@ -199,10 +297,21 @@ public sealed class Installation(string destination, IRegistrations registration
                 w.WriteString("path", Path.Combine(Destination, "host", "TsinghuaLoginHost.exe")); w.WriteString("type", "stdio");
                 w.WriteStartArray("allowed_origins"); w.WriteStringValue(BuildInfo.Origin); w.WriteEndArray(); w.WriteEndObject();
             }));
-            if (oldExists) RetryMove(Destination, Previous);
-            Step("old-moved"); RetryMove(Next, Destination); Step("new-moved");
+            Phase = "替换旧版本文件";
+            if (oldExists)
+            {
+                try { RetryMove(Destination, Previous); }
+                catch (Exception error) when (CanUpdateInPlace(error) && Directory.Exists(Destination) && !Directory.Exists(Previous))
+                { (files, obsolete) = UpdateFiles(snapshot); }
+            }
+            if (files == null)
+            {
+                Step("old-moved"); Phase = "放置新版本文件"; RetryMove(Next, Destination); Step("new-moved");
+            }
+            Phase = "更新浏览器连接配置";
             for (int i = 0; i < snapshot.Length; i++) { registrations.Set(i, new Registration(true, Manifest)); Step("registration-" + i); }
-            WriteJournal(snapshot, oldExists, true);
+            Phase = "确认安装完成";
+            WriteJournal(snapshot, oldExists, true, files, obsolete);
         }
         catch (Exception error) { Rollback(error); }
         // A locked old file may prevent cleanup. The committed journal makes the next run safe.
@@ -210,16 +319,20 @@ public sealed class Installation(string destination, IRegistrations registration
     }
     public void Uninstall()
     {
-        Recover(); var snapshot = Preflight(); bool oldExists = Directory.Exists(Destination);
+        Phase = "恢复上次未完成的操作"; Recover();
+        Phase = "检查已有安装和连接配置"; var snapshot = Preflight(); bool oldExists = Directory.Exists(Destination);
+        Phase = "创建卸载暂存目录";
         Begin(snapshot, oldExists);
         try
         {
-            if (oldExists) RetryMove(Destination, Previous);
+            Phase = "移除旧版本文件"; if (oldExists) RetryMove(Destination, Previous);
             Step("old-moved");
+            Phase = "移除浏览器连接配置";
             for (int i = 0; i < snapshot.Length; i++) { registrations.Set(i, new Registration(false, null)); Step("registration-" + i); }
             WriteJournal(snapshot, oldExists, true);
         }
         catch (Exception error) { Rollback(error); }
-        try { Recover(); } catch { throw new IOException("连接配置已移除，但文件仍被占用。请关闭浏览器，再次运行卸载程序以完成清理。"); }
+        try { Recover(); } catch (Exception error) { throw new SetupFailure("清理卸载文件",
+            "连接配置已移除，部分文件尚未清理。解决上述原因后，再次运行卸载程序。", error); }
     }
 }

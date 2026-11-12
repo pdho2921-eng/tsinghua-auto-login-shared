@@ -17,6 +17,7 @@ internal static class Program
         if (!(args.Length == 0 || args.Length == 1 || quiet) ||
             (args.Length > 0 && args[0] is not "--install" and not "--uninstall")) return 2;
         bool uninstall = args.Length > 0 ? args[0] == "--uninstall" : Path.GetFileNameWithoutExtension(Environment.ProcessPath) == "卸载";
+        Installation? installation = null;
         try
         {
             if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) || RuntimeInformation.OSArchitecture != Architecture.X64)
@@ -35,7 +36,7 @@ internal static class Program
                 try { held = mutex.WaitOne(TimeSpan.FromSeconds(3)); } catch (AbandonedMutexException) { held = true; }
                 if (!held) throw new IOException("另一个安装或卸载操作正在进行，请稍后重试。");
                 var manifest = Path.Combine(destination, BuildInfo.Host + ".json");
-                var installation = new Installation(destination, new WindowsRegistrations(manifest));
+                installation = new Installation(destination, new WindowsRegistrations(manifest));
                 if (uninstall)
                 {
                     if (!quiet && MessageBoxW(0,
@@ -45,12 +46,16 @@ internal static class Program
                 }
                 else
                 {
+                    bool upgrading = Directory.Exists(destination);
                     using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip")!;
                     using var memory = new MemoryStream(); resource.CopyTo(memory);
                     installation.Install(memory.ToArray(), PayloadInfo.Hash);
                     if (!quiet)
                     {
-                        MessageBoxW(0, "安装完成。\n\n接下来请按“开始使用”说明，在 Edge 加载 extension 文件夹，再保存账号密码。\n\n更新后请在 Edge 扩展管理页点击本扩展的“重新加载”。", Title, 0x40);
+                        string next = upgrading
+                            ? "已覆盖更新原共享版，账号密码和浏览器开关保留。\n\n请在 Edge 扩展管理页重新加载共享版；若刚才关闭了扩展开关，请重新开启。关闭旧学校标签页再测试，无需重新保存密码。"
+                            : "接下来请按“开始使用”说明，在 Edge 加载 extension 文件夹，再保存账号密码。";
+                        MessageBoxW(0, "安装完成。\n\n" + next + "\n\n扩展版本 " + BuildInfo.ExtensionVersion + "，助手版本 " + BuildInfo.Version + "。", Title, 0x40);
                         try { Open(Path.Combine(destination, "开始使用.html")); Open(Path.Combine(destination, "extension")); }
                         catch { MessageBoxW(0, "使用说明和扩展位于：\n" + destination, Title, 0x40); }
                     }
@@ -63,7 +68,7 @@ internal static class Program
         {
             if (!quiet)
             {
-                string detail = error is IOException ? error.Message : "请关闭浏览器后重试；如仍失败，请反馈此提示。";
+                string detail = SetupErrors.Describe(error, installation?.Phase ?? "启动安装程序");
                 MessageBoxW(0, "操作未完成。\n\n" + detail, Title, 0x10);
             }
             return 1;

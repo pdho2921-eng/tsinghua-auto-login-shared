@@ -3,10 +3,14 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using Tsinghua;
 
 internal static class Program
 {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern SafeFileHandle CreateFileW(string name, uint access, uint sharing, nint security, uint disposition, uint flags, nint template);
     static int passed;
     static void Check(bool condition, string message = "assertion failed") { if (!condition) throw new Exception(message); }
     static void Test(string name, Action run) { run(); passed++; Console.WriteLine("PASS " + name); }
@@ -149,6 +153,96 @@ internal static class Program
     }
     static void InstallTests()
     {
+        Test("upgrade succeeds when the old installation directory cannot be renamed", () => InDirectory(root =>
+        {
+            var regs = new Registrations(); var destination = Path.Combine(root, "app"); var payload = Fixture();
+            new Installation(destination, regs).Install(payload, Hash(payload));
+            File.WriteAllText(Path.Combine(destination, "extension", "policy.js"), "old-script");
+            File.WriteAllText(Path.Combine(destination, "extension", "obsolete.js"), "old-file");
+            var installer = new Installation(destination, regs, moveDirectory: (source, target) =>
+            {
+                if (source == destination) throw new IOException("Directory held by browser", unchecked((int)0x80070005));
+                Directory.Move(source, target);
+            });
+            installer.Install(payload, Hash(payload));
+            Check(File.ReadAllText(Path.Combine(destination, "extension", "policy.js")) == "fixture");
+            Check(!File.Exists(Path.Combine(destination, "extension", "obsolete.js")));
+            Check(regs.Values.All(v => v.Value == installer.Manifest));
+            Check(!Directory.Exists(destination + ".transaction"));
+        }));
+        Test("upgrade failure reports the original lock code after restoring old files", () => InDirectory(root =>
+        {
+            var regs = new Registrations(); var installer = new Installation(Path.Combine(root, "app"), regs); var payload = Fixture();
+            installer.Install(payload, Hash(payload)); File.WriteAllText(Path.Combine(installer.Destination, "old-version"), "keep");
+            var locked = new Installation(installer.Destination, regs, step =>
+            { if (step == "staged") throw new IOException("fixture lock", unchecked((int)0x80070020)); });
+            string message = "";
+            try { locked.Install(payload, Hash(payload)); } catch (IOException error) { message = error.Message; }
+            Check(message.Contains("已恢复原来的安装和连接配置"), message);
+            Check(message.Contains("80070020") && message.Contains("文件被占用"), message);
+            Check(File.ReadAllText(Path.Combine(installer.Destination, "old-version")) == "keep");
+            installer.Install(payload, Hash(payload)); Check(!File.Exists(Path.Combine(installer.Destination, "old-version")));
+        }));
+        foreach (var failureAt in new[] { "in-place-started", "in-place-file:extension/manifest.json", "in-place-file:extension/policy.js", "in-place-file:host/TsinghuaLoginHost.exe", "registration-1" })
+            Test("in-place rollback restores overwritten and newly created files at " + failureAt, () => InDirectory(root =>
+            {
+                var regs = new Registrations(); var destination = Path.Combine(root, "app"); var payload = Fixture();
+                new Installation(destination, regs).Install(payload, Hash(payload));
+                File.WriteAllText(Path.Combine(destination, "extension", "manifest.json"), "{\"version\":\"0.1.6\"}");
+                File.Delete(Path.Combine(destination, "extension", "policy.js"));
+                File.WriteAllText(Path.Combine(destination, "host", "TsinghuaLoginHost.exe"), "old-host");
+                var before = Directory.GetFiles(destination, "*", SearchOption.AllDirectories).ToDictionary(p => p, p => Hash(File.ReadAllBytes(p)));
+                var values = regs.Read();
+                var installer = new Installation(destination, regs, step => { if (step == failureAt) throw new IOException("injected"); },
+                    (source, target) => { if (source == destination) throw new IOException("directory in use", unchecked((int)0x80070005)); Directory.Move(source, target); });
+                Fails(() => installer.Install(payload, Hash(payload)));
+                Check(Directory.GetFiles(destination, "*", SearchOption.AllDirectories).ToHashSet().SetEquals(before.Keys));
+                Check(before.All(p => Hash(File.ReadAllBytes(p.Key)) == p.Value));
+                Check(values.SequenceEqual(regs.Values)); Check(!Directory.Exists(destination + ".transaction"));
+            }));
+        Test("upgrade replaces an older extension without changing external credentials or settings", () => InDirectory(root =>
+        {
+            var regs = new Registrations(); var installer = new Installation(Path.Combine(root, "app"), regs); var payload = Fixture();
+            installer.Install(payload, Hash(payload));
+            File.WriteAllText(Path.Combine(installer.Destination, "extension", "manifest.json"), "{\"version\":\"0.1.6\"}");
+            File.WriteAllText(Path.Combine(installer.Destination, "extension", "obsolete.js"), "old");
+            var credentials = Path.Combine(root, "TsinghuaAutoLoginShared.Credentials.v1"); Directory.CreateDirectory(credentials);
+            File.WriteAllText(Path.Combine(credentials, "identity.dpapi"), "encrypted-fixture");
+            var settings = Path.Combine(root, "Edge-profile-settings"); File.WriteAllText(settings, "automatic=false");
+            installer.Install(payload, Hash(payload));
+            using var manifest = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(installer.Destination, "extension", "manifest.json")));
+            Check(manifest.RootElement.GetProperty("version").GetString() == BuildInfo.ExtensionVersion);
+            Check(!File.Exists(Path.Combine(installer.Destination, "extension", "obsolete.js")));
+            Check(File.ReadAllText(Path.Combine(credentials, "identity.dpapi")) == "encrypted-fixture");
+            Check(File.ReadAllText(settings) == "automatic=false");
+        }));
+        Test("next invocation recovers a persisted in-place update interrupted after a file replacement", () => InDirectory(root =>
+        {
+            var regs = new Registrations(); var destination = Path.Combine(root, "app"); var payload = Fixture();
+            new Installation(destination, regs).Install(payload, Hash(payload));
+            var script = Path.Combine(destination, "extension", "policy.js"); File.WriteAllText(script, "old-script");
+            Dictionary<string, byte[]>? persisted = null;
+            var transaction = destination + ".transaction";
+            var installer = new Installation(destination, regs, step =>
+            {
+                if (step != "in-place-file:extension/policy.js") return;
+                persisted = Directory.GetFiles(transaction, "*", SearchOption.AllDirectories)
+                    .ToDictionary(p => Path.GetRelativePath(transaction, p), File.ReadAllBytes);
+                throw new IOException("capture simulated interruption");
+            }, (source, target) => { if (source == destination) throw new IOException("directory in use", unchecked((int)0x80070005)); Directory.Move(source, target); });
+            Fails(() => installer.Install(payload, Hash(payload))); Check(persisted != null);
+            // Replay the exact journal/backups captured before rollback, with the
+            // changed file still installed, as after abrupt process termination.
+            File.WriteAllText(script, "fixture");
+            foreach (var file in persisted!)
+            {
+                var target = Path.Combine(transaction, file.Key); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllBytes(target, file.Value);
+            }
+            new Installation(destination, regs).Recover();
+            Check(File.ReadAllText(script) == "old-script"); Check(!Directory.Exists(transaction));
+            Check(regs.Values.All(v => v.Exists));
+        }));
         Test("install upgrade uninstall twice reinstall; credentials untouched", () => InDirectory(root =>
         {
             var destination = Path.Combine(root, "安装 文件夹"); var regs = new Registrations(); var installer = new Installation(destination, regs);
@@ -179,6 +273,17 @@ internal static class Program
             var regs = new Registrations(); var installer = new Installation(Path.Combine(root, "app"), regs); var payload = Fixture();
             installer.Install(payload, Hash(payload)); regs.FailIndex = 2;
             Fails(() => installer.Uninstall()); Check(Directory.Exists(installer.Destination)); Check(regs.Values.All(v => v.Exists));
+        }));
+        Test("permission failures preserve their phase and are not reported as a confirmed browser lock", () => InDirectory(root =>
+        {
+            var regs = new Registrations(); var installer = new Installation(Path.Combine(root, "app"), regs); var payload = Fixture();
+            installer.Install(payload, Hash(payload)); regs.FailIndex = 1;
+            string message = "";
+            try { installer.Install(payload, Hash(payload)); } catch (IOException error) { message = error.Message; }
+            Check(message.Contains("更新浏览器连接配置") && message.Contains("UnauthorizedAccessException/80070005"), message);
+            Check(!message.Contains("文件被占用，暂时不能替换"), message);
+            Check(Directory.Exists(installer.Destination) && regs.Values.All(v => v.Exists));
+            Check(SetupErrors.Describe(new InvalidOperationException("private diagnostic"), "校验安装包").Contains("诊断代码"));
         }));
         Test("partially created empty registration is rolled back", () => InDirectory(root =>
         {
@@ -232,6 +337,29 @@ internal static class Program
             ProtocolTests(); InstallTests();
             if (OperatingSystem.IsWindows())
             {
+                Test("Windows directory handle without delete sharing permits an in-place upgrade", () => InDirectory(root =>
+                {
+                    var regs = new Registrations(); var destination = Path.Combine(root, "app"); var installer = new Installation(destination, regs); var payload = Fixture();
+                    installer.Install(payload, Hash(payload)); File.WriteAllText(Path.Combine(destination, "extension", "policy.js"), "old-script");
+                    using var held = CreateFileW(destination, 0, 3, 0, 3, 0x02000000, 0);
+                    Check(!held.IsInvalid, "Could not create the Windows directory-lock fixture");
+                    installer.Install(payload, Hash(payload));
+                    Check(File.ReadAllText(Path.Combine(destination, "extension", "policy.js")) == "fixture");
+                }));
+                Test("Windows locked old helper rolls back and upgrades after the handle is released", () => InDirectory(root =>
+                {
+                    var regs = new Registrations(); var installer = new Installation(Path.Combine(root, "app"), regs); var payload = Fixture();
+                    installer.Install(payload, Hash(payload));
+                    File.WriteAllText(Path.Combine(installer.Destination, "host", "TsinghuaLoginHost.exe"), "older-helper");
+                    using (var locked = new FileStream(Path.Combine(installer.Destination, "host", "TsinghuaLoginHost.exe"), FileMode.Open, FileAccess.Read, FileShare.Read))
+                    {
+                        string message = "";
+                        try { installer.Install(payload, Hash(payload)); } catch (IOException error) { message = error.Message; }
+                        Check(message.Contains("已恢复原来的安装和连接配置") && message.Contains("诊断代码"), message);
+                        Check(regs.Values.All(v => v.Exists));
+                    }
+                    installer.Install(payload, Hash(payload)); Check(!Directory.Exists(installer.Destination + ".transaction"));
+                }));
                 Test("real current-user DPAPI long Unicode secrets; corruption fails closed", () => InDirectory(root =>
                 {
                     if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();

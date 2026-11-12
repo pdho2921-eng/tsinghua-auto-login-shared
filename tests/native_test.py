@@ -117,6 +117,36 @@ class NativeTests(unittest.TestCase):
         (package / 'native/host').chmod(0o755)
         return package
 
+    def test_upgrade_older_extension_while_old_host_and_file_are_open(self):
+        with tempfile.TemporaryDirectory(prefix='thu-upgrade-') as temp:
+            root = Path(temp); package = self.unpack(root / 'package'); home = root / 'home'
+            subprocess.run([HOST, '--test-install', home, package], check=True, capture_output=True)
+            install = home / 'Library/Application Support/TsinghuaAutoLoginShared'
+            manifest = install / 'extension/manifest.json'
+            old = json.loads(manifest.read_text()); old['version'] = '0.1.6'; manifest.write_text(json.dumps(old))
+            (install / 'extension/obsolete.js').write_text('old file')
+            settings = home / 'Library/Application Support/Google/Chrome/test-settings'
+            settings.write_text('automatic=false')
+            vault = home / 'Library/Keychains/fixture-keychain'; vault.parent.mkdir(parents=True)
+            vault.write_bytes(b'untouched encrypted fixture')
+            running = subprocess.Popen([install / 'host', '--test-protocol'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                with manifest.open('rb') as held:
+                    result = subprocess.run([HOST, '--test-install', home, package], capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr.decode())
+                    self.assertEqual(json.load(held)['version'], '0.1.6')
+                self.assertIsNone(running.poll())
+                body = json.dumps({'protocol': 1, 'op': 'status'}).encode()
+                response, errors = running.communicate(struct.pack('<I', len(body)) + body, timeout=5)
+                self.assertEqual(running.returncode, 0, errors)
+                self.assertTrue(json.loads(response[4:])['ok'])
+                self.assertEqual(json.loads(manifest.read_text())['version'], json.loads((package / 'extension/manifest.json').read_text())['version'])
+                self.assertFalse((install / 'extension/obsolete.js').exists())
+                self.assertEqual(settings.read_text(), 'automatic=false')
+                self.assertEqual(vault.read_bytes(), b'untouched encrypted fixture')
+            finally:
+                if running.poll() is None: running.kill(); running.communicate()
+
     def snapshot(self, home):
         return {str(p.relative_to(home)): hashlib.sha256(p.read_bytes()).hexdigest() for p in home.rglob('*') if p.is_file()}
 

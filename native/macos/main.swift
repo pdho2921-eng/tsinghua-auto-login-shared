@@ -193,6 +193,7 @@ func validatePackage(_ package: URL) throws {
 func install(package: URL, home: URL) throws {
     try validatePackage(package)
     let destination = appDirectory(home)
+    let upgrading = fm.fileExists(atPath: destination.path)
     let registrations = browsers.map { manifestURL(home, $0) }
     // Preserve unrelated registrations and record exact bytes for rollback.
     let previous: [Data?] = try registrations.map { path in
@@ -251,10 +252,17 @@ func install(package: URL, home: URL) throws {
         throw failure
     }
     print("安装完成。无需设置开机启动，浏览器会按需调用助手。")
-    print("打开 chrome://extensions/，开启开发者模式，选择‘加载已解压的扩展程序’。")
+    if upgrading {
+        print("已覆盖更新原共享版，账号密码和浏览器开关保留。")
+        print("打开 chrome://extensions/，点击共享版的‘重新加载’，无需移除扩展或重新保存密码。")
+        print("关闭旧学校标签页后再测试。若钥匙串授权失效，请在设置页按提示处理。")
+    } else {
+        print("打开 chrome://extensions/，开启开发者模式，选择‘加载已解压的扩展程序’。")
+    }
     print("选择以下文件夹（选择窗口中可按 Command+Shift+G 后粘贴）：")
     print(destination.appendingPathComponent("extension").path)
-    print("随后在扩展设置页检查连接并保存账号密码。")
+    print("扩展版本 \(BuildInfo.extensionVersion)，助手版本 \(BuildInfo.version)。")
+    print(upgrading ? "随后在扩展设置页检查连接。" : "随后在扩展设置页检查连接并保存账号密码。")
 }
 func uninstall(home: URL) throws {
     let destination = appDirectory(home)

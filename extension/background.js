@@ -16,8 +16,8 @@ async function releaseSubmission(tabId) {
   if (active.submitting?.tabId === tabId) await chrome.storage.session.remove('submitting');
 }
 async function openSiteFromSettings(message, sender) {
-  if (!globalThis.THUPlatform?.isWindows || !THUCredentials.isSettings(chrome, sender)) return {ok: false, error: 'denied'};
-  if (Object.keys(message).length !== 2 || !Object.hasOwn(THU.SITES, message.site || '')) return {ok: false, error: 'invalid-request'};
+  if (!THUCredentials.isSettings(chrome, sender)) return {ok: false, error: 'denied'};
+  if (Object.keys(message).length !== 2 || typeof message.site !== 'string' || !Object.hasOwn(THU.SITES, message.site)) return {ok: false, error: 'invalid-request'};
   const site = message.site;
   const settings = await chrome.storage.local.get({username: '', mailUsername: ''});
   if (!THU.credentialFor(site, settings).username) return {ok: false, error: 'not-found'};

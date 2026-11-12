@@ -143,7 +143,7 @@ void chrome.storage.local.get({automatic: true, siteAutomatic: {}}).then(setting
   $('automatic').checked = settings.automatic;
   for (const site of Object.keys(THU.SITES)) $(`auto-${site}`).checked = settings.siteAutomatic[site] !== false;
 });
-if (THUPlatform.isWindows) {
+{
   let openingSite = false;
   const links = [...document.querySelectorAll('[data-open-site]')];
   for (const link of links) link.addEventListener('click', async event => {
@@ -162,5 +162,5 @@ if (THUPlatform.isWindows) {
     }
   });
 }
-void check({notifySuccess: THUPlatform.isWindows});
+void check({notifySuccess: true});
 syncFieldTools();

@@ -16,16 +16,16 @@ const output = path.join(root, 'build/windows/page-check'); fs.mkdirSync(output,
     await context.route('https://**/*', route => route.abort());
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     assert.equal(new URL(worker.url()).host, extensionId);
-    await worker.evaluate(() => {
+    await worker.evaluate(helperVersion => {
       chrome.runtime.connectNative = () => {
         let listener;
         return {onMessage: {addListener(fn) {listener = fn;}}, onDisconnect: {addListener() {}}, disconnect() {},
           postMessage(request) {
             if (request.op !== 'status') throw new Error('Presentation test must not use credentials');
-            setTimeout(() => listener({protocol: 1, ok: true, version: '0.1.0', accounts: {identity: {configured: false, username: ''}, mail: {configured: false, username: ''}}}), 10);
+            setTimeout(() => listener({protocol: 1, ok: true, version: helperVersion, accounts: {identity: {configured: false, username: ''}, mail: {configured: false, username: ''}}}), 10);
           }};
       };
-    });
+    }, require('../native/windows/config.json').version);
     const page = await context.newPage(); const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`chrome-extension://${extensionId}/options.html`);

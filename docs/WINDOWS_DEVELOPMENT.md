@@ -48,6 +48,23 @@ node --test tests/*.test.cjs
 
 面向同学的简明步骤在 `docs/WINDOWS.md`，随 Windows 包作为 README 分发。正式签名、商店发布及项目公开许可证仍未完成。
 
+## 代码签名与智能应用控制（2026-11-12 核查）
+
+用户实测报告：`安装.exe` 被 Windows 智能应用控制拦截，提示无法验证发布者。本机读取最终 ZIP 内安装、卸载程序及构建出的助手 PE 证书表，三者的 Authenticode 证书表均为空。尚未在真实 Windows 环境复现或验证放行；这是与未签名分发相符的反馈，不能宣称已修复系统信任问题。
+
+| 路径 | 费用 | 用时与难度 | 当前限制 |
+| --- | --- | --- | --- |
+| SignPath Foundation | 合格开源项目免费 | 需准备公开源码、构建来源证明和签名流程，并等待审核；无确定获批时间 | 项目尚未选择公开许可证或公开仓库；公开发布及许可需要项目所有者决定，不能直接上传替其决定 |
+| Microsoft Artifact Signing | Basic 约 9.99 美元/月，最多 5,000 次签名 | 需 Azure 付费订阅、实名验证和签名流程；完成身份审核后才能签名 | Public Trust 个人申请目前仅限美国、加拿大；若以中国大陆个人身份申请，当前不适用；Private Trust 不能代替公众信任签名 |
+| Microsoft Store 的 MSIX 路线 | Store 代签 MSIX 本身免费 | 需改造分发与安装方式、开发者注册和商店审核，工作量更大 | 当前 EXE 不能直接当作 MSIX 上传；通过 Store 分发 EXE 也仍要求发布者先签名 |
+| 传统 CA 代码签名 | 按证书、硬件或云签名服务报价 | 需要身份审核及安全密钥保管，通常有持续费用 | 未取得适合本项目、符合预算的报价，不作为当前主方案 |
+
+资料：[SignPath 免费签名条件](https://signpath.org/terms)、[SignPath 项目信誉与审核说明](https://signpath.org/terms.html)、[微软价格](https://azure.microsoft.com/en-us/products/artifact-signing/)、[微软身份与地区条件](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart)、[微软签名路线比较](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)。地区、价格和服务条件可能更新，申请前再次核对。
+
+当前不创建自签名证书、不要求使用者导入不明根证书，也不把文件版本或 CompanyName 属性当作可信签名。若获得真实签名身份，构建顺序必须为：发布助手 → 签名并验证助手 → 生成文件指纹和内嵌包 → 编译安装器 → 签名并验证安装器 → 复制为安装／卸载入口 → 更新最终校验值。不能在生成内嵌文件指纹之后再修改助手。还需核查自包含运行时解包后的可执行组件是否满足应用控制，再从最终包实测安装、运行和卸载。仅签外层安装器不足以证明助手可以运行。
+
+用户本轮明确要求在无法立即提供可信签名时补充关闭方法，因此 `docs/WINDOWS.md` 新增了系统设置入口、整机影响、恢复条件，以及重新开启后未签名助手仍可能被拦截的说明。没有在产品中加入关闭安全设置的代码。微软当前 FAQ 已说明近期更新支持重新开启；不能继续笼统写成“关闭后一定只能重装系统恢复”。
+
 ## 官方资料
 
 - [Chrome Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)

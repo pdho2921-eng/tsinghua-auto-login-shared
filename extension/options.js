@@ -1,6 +1,12 @@
 const $ = id => document.getElementById(id);
 const roles = ['identity', 'mail'];
 let checking = false;
+let connectionNoticeTimer;
+function hideConnectionNotice() {
+  clearTimeout(connectionNoticeTimer);
+  $('connection-success').hidden = true;
+}
+$('dismiss-connection-success').addEventListener('click', hideConnectionNotice);
 const configured = {identity: false, mail: false};
 function syncFieldTools() {
   for (const button of document.querySelectorAll('[data-copy-from]')) {
@@ -38,8 +44,9 @@ async function send(message) {
   try { return await chrome.runtime.sendMessage(message); }
   catch { return {ok: false, error: 'helper-unavailable'}; }
 }
-async function check() {
+async function check({notifySuccess = false} = {}) {
   if (checking) return;
+  hideConnectionNotice();
   checking = true; $('check').disabled = true;
   $('check').setAttribute('aria-busy', 'true');
   $('connection-status').textContent = '正在检查本机助手…';
@@ -60,10 +67,14 @@ async function check() {
         $(`${role}-delete`).disabled = !account?.configured;
       }
       await chrome.storage.local.set({username: accounts.identity?.username || '', mailUsername: accounts.mail?.username || ''});
+      if (notifySuccess) {
+        $('connection-success').hidden = false;
+        connectionNoticeTimer = setTimeout(hideConnectionNotice, 6000);
+      }
     }
   } finally { checking = false; $('check').disabled = false; $('check').removeAttribute('aria-busy'); syncFieldTools(); }
 }
-$('check').addEventListener('click', check);
+$('check').addEventListener('click', () => check({notifySuccess: true}));
 for (const role of roles) {
   $(`${role}-form`).addEventListener('submit', async event => {
     event.preventDefault();

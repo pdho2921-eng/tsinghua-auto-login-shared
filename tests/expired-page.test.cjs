@@ -9,7 +9,7 @@ const policy = require('../extension/policy.js');
 // The real expired page was inspected in Chrome on 2026-11-11:
 // <a class="chongxin" onclick="top.document.location='/'" style="cursor:pointer">登录网络学堂</a>
 // In particular it has NO href. Execute the actual content script at this seam.
-async function runExpiredPage({href = null, onclick = "top.document.location='/'"} = {}) {
+async function runExpiredPage({href = null, onclick = "top.document.location='/'", bodyText = '您未登录或登录失效\n登录网络学堂\n关闭'} = {}) {
   const messages = [], clicks = [], navigations = [];
   const nodes = new Map();
   const link = {
@@ -22,7 +22,7 @@ async function runExpiredPage({href = null, onclick = "top.document.location='/'
   const close = {innerText: '关闭', href: '', getClientRects() { return [{}]; }};
   const document = {
     visibilityState: 'visible',
-    body: {innerText: '您未登录或登录失效\n登录网络学堂\n关闭', append(el) { nodes.set(el.id, el); }},
+    body: {innerText: bodyText, append(el) { nodes.set(el.id, el); }},
     querySelectorAll(selector) { return selector === 'a' ? [link, close] : []; },
     getElementById(id) { return nodes.get(id); },
     createElement: element,
@@ -71,4 +71,12 @@ test('invalid, insecure, external or unrelated targets are ignored safely', () =
     assert.equal(policy.expiredLoginTarget(href, null, policy.HOME), null);
   }
   assert.equal(policy.expiredLoginTarget('/', null, 'https://elsewhere.test/'), null);
+});
+
+test('normal course content does not begin a login flow or later produce a false timeout', async () => {
+  for (const bodyText of ['课程作业 请提交本周作业', '课程资料 下载课件', '']) {
+    const result = await runExpiredPage({bodyText});
+    assert.equal(result.messages.some(m => m.op === 'begin'), false);
+    assert.equal(result.clicks.length + result.navigations.length, 0);
+  }
 });

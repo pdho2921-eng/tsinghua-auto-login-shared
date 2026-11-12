@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import CryptoKit
 import Darwin
 
 enum HostError: Error { case code(String) }
@@ -166,34 +167,89 @@ func writeJSON(_ object: Any, to path: URL) throws {
     try fm.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
     try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]).write(to: path, options: .atomic)
 }
-func replaceItem(_ source: URL, _ target: URL) throws {
-    let staging = target.deletingLastPathComponent().appendingPathComponent(".staging-" + UUID().uuidString)
-    let backup = target.deletingLastPathComponent().appendingPathComponent(".backup-" + UUID().uuidString)
-    try fm.copyItem(at: source, to: staging)
-    defer { try? fm.removeItem(at: staging); try? fm.removeItem(at: backup) }
-    let exists = fm.fileExists(atPath: target.path)
-    if exists { try fm.moveItem(at: target, to: backup) }
-    do { try fm.moveItem(at: staging, to: target) }
-    catch {
-        if exists { try? fm.moveItem(at: backup, to: target) }
-        throw error
-    }
-}
-func install(package: URL, home: URL) throws {
+// Validate the complete staged payload before replacing any installed files.
+func validatePackage(_ package: URL) throws {
+    let mismatch = HostError.code("安装包中的扩展与助手不匹配，请重新解压完整安装包。")
     let sourceExtension = package.appendingPathComponent("extension")
     let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: sourceExtension.appendingPathComponent("manifest.json"))) as? [String: Any]
-    guard manifest?["key"] as? String == BuildInfo.publicKey, manifest?["version"] as? String == BuildInfo.version else {
-        throw HostError.code("安装包中的扩展与助手不匹配，请重新解压完整安装包。")
+    guard manifest?["key"] as? String == BuildInfo.publicKey,
+          manifest?["version"] as? String == BuildInfo.extensionVersion else { throw mismatch }
+    guard try sourceExtension.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else { throw mismatch }
+    guard let entries = fm.enumerator(atPath: sourceExtension.path) else { throw mismatch }
+    var hashes: [String: String] = [:]
+    for case let relative as String in entries {
+        let file = sourceExtension.appendingPathComponent(relative)
+        let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values.isSymbolicLink != true else { throw mismatch }
+        if values.isRegularFile == true && file.lastPathComponent != ".DS_Store" {
+            hashes[relative] = SHA256.hash(data: try Data(contentsOf: file)).map { String(format: "%02x", $0) }.joined()
+        }
     }
+    guard hashes == BuildInfo.extensionHashes else { throw mismatch }
+    let host = package.appendingPathComponent("native/host")
+    guard try host.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true,
+          try Data(contentsOf: host) == Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[0])) else { throw mismatch }
+}
+func install(package: URL, home: URL) throws {
+    try validatePackage(package)
     let destination = appDirectory(home)
-    try fm.createDirectory(at: destination, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-    try replaceItem(package.appendingPathComponent("native/host"), destination.appendingPathComponent("host"))
-    try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destination.appendingPathComponent("host").path)
-    try replaceItem(sourceExtension, destination.appendingPathComponent("extension"))
+    let registrations = browsers.map { manifestURL(home, $0) }
+    // Preserve unrelated registrations and record exact bytes for rollback.
+    let previous: [Data?] = try registrations.map { path in
+        guard fm.fileExists(atPath: path.path) else { return nil }
+        let data = try Data(contentsOf: path)
+        let item = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard item?["path"] as? String == destination.appendingPathComponent("host").path else {
+            throw HostError.code("连接配置已被其他程序更改，已停止安装。")
+        }
+        return data
+    }
+    let parent = destination.deletingLastPathComponent()
+    try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+    let transaction = parent.appendingPathComponent(".install-" + UUID().uuidString)
+    let staged = transaction.appendingPathComponent("next")
+    let backup = transaction.appendingPathComponent("previous")
+    var keepBackup = false, movedPrevious = false, installed = false
+    var written: [Int] = []
+    try fm.createDirectory(at: staged.appendingPathComponent("native"), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    defer { if !keepBackup { try? fm.removeItem(at: transaction) } }
+    try fm.copyItem(at: package.appendingPathComponent("native/host"), to: staged.appendingPathComponent("native/host"))
+    try fm.copyItem(at: package.appendingPathComponent("extension"), to: staged.appendingPathComponent("extension"))
+    try validatePackage(staged)
+    try fm.moveItem(at: staged.appendingPathComponent("native/host"), to: staged.appendingPathComponent("host"))
+    try fm.removeItem(at: staged.appendingPathComponent("native"))
+    try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: staged.path)
+    try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: staged.appendingPathComponent("host").path)
     let hostManifest: [String: Any] = ["name": BuildInfo.host, "description": "清华网站自动重登共享助手",
       "path": destination.appendingPathComponent("host").path, "type": "stdio",
       "allowed_origins": ["chrome-extension://\(BuildInfo.extensionID)/"]]
-    for browser in browsers { try writeJSON(hostManifest, to: manifestURL(home, browser)) }
+    do {
+        if fm.fileExists(atPath: destination.path) {
+            try fm.moveItem(at: destination, to: backup); movedPrevious = true
+        }
+        try fm.moveItem(at: staged, to: destination); installed = true
+        for (index, path) in registrations.enumerated() {
+            try writeJSON(hostManifest, to: path); written.append(index)
+        }
+    } catch {
+        let failure = error
+        var rollbackFailed = false
+        for index in written.reversed() {
+            do {
+                if let data = previous[index] { try data.write(to: registrations[index], options: .atomic) }
+                else { try fm.removeItem(at: registrations[index]) }
+            } catch { rollbackFailed = true }
+        }
+        do {
+            if installed { try fm.removeItem(at: destination) }
+            if movedPrevious { try fm.moveItem(at: backup, to: destination) }
+        } catch { rollbackFailed = true }
+        if rollbackFailed {
+            keepBackup = true
+            throw HostError.code("安装未完成，旧文件备份保留在：\(transaction.path)")
+        }
+        throw failure
+    }
     print("安装完成。无需设置开机启动，浏览器会按需调用助手。")
     print("打开 chrome://extensions/，开启开发者模式，选择‘加载已解压的扩展程序’。")
     print("选择以下文件夹（选择窗口中可按 Command+Shift+G 后粘贴）：")

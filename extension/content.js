@@ -123,6 +123,7 @@
       // Filling, navigation, and clicks remain restricted to the visible tab.
       if (document.visibilityState !== 'visible') return;
       if ((type === 'form' && !THU.authSite(text)) ||
+          (type === 'learn' && !text.includes('您未登录或登录失效')) ||
           (type === 'info' && !infoExpired && !infoLogin) ||
           (type === 'mail-app' && !mail.expired) ||
           ['redirect', 'info-redirect', 'webvpn'].includes(type)) return;

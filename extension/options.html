@@ -6,6 +6,10 @@
   <link rel="icon" href="icons/icon-32.png"><link rel="stylesheet" href="options.css">
 </head>
 <body>
+<div id="connection-success" class="success-notice" role="status" aria-live="polite" hidden>
+  <span class="success-mark" aria-hidden="true">✓</span><strong>连接成功</strong>
+  <button id="dismiss-connection-success" class="icon-button" type="button" aria-label="关闭提示">×</button>
+</div>
 <main class="page">
   <header class="masthead">
     <img class="brand-icon" src="icons/icon.svg" width="64" height="64" alt="">
@@ -80,7 +84,7 @@
     </div></details>
     <p class="close-hint">完成账号保存后，可关闭当前标签页。助手会按当前设置运行。</p>
   </section>
-  <footer class="page-footer"><span class="version">扩展版本 0.1.4</span></footer>
+  <footer class="page-footer"><span class="version">扩展版本 0.1.5</span></footer>
 </main>
 <script src="policy.js"></script><script src="native.js"></script><script src="options.js"></script>
 </body>

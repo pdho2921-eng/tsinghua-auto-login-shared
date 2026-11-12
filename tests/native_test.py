@@ -2,13 +2,16 @@
 from pathlib import Path
 import json
 import struct
+import hashlib
+import os
 import subprocess
 import tempfile
 import unittest
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-HOST = ROOT / 'build/host'
+HOST = Path(os.environ.get('THU_TEST_HOST', ROOT / 'build/host'))
+ARCHIVE = Path(os.environ.get('THU_TEST_ARCHIVE', ROOT / 'dist/tsinghua-auto-login-shared-macos.zip'))
 CONFIG = json.loads((ROOT / 'native/config.json').read_text())
 
 def invoke(payload, origin='--test-protocol'):
@@ -22,6 +25,17 @@ def decode(result):
     return json.loads(result.stdout[4:])
 
 class NativeTests(unittest.TestCase):
+    def test_release_versions_and_executable_modes(self):
+        with zipfile.ZipFile(ARCHIVE) as z:
+            prefix = '清华网站自动重登-共享试用版/'
+            manifest = json.loads(z.read(prefix + 'extension/manifest.json'))
+            self.assertIn(('扩展版本 ' + manifest['version']).encode(), z.read(prefix + 'extension/options.html'))
+            for name in ['native/host', '安装.command', '卸载.command']:
+                self.assertTrue((z.getinfo(prefix + name).external_attr >> 16) & 0o100)
+            self.assertEqual(z.read(prefix + 'native/host'), HOST.read_bytes())
+        version = subprocess.check_output([HOST, '--version'], text=True).strip()
+        self.assertEqual(version, CONFIG['version'])
+
     def test_memory_store_lifecycle(self):
         r = subprocess.run([HOST, '--self-test'], capture_output=True)
         self.assertEqual(r.returncode, 0)
@@ -69,15 +83,18 @@ class NativeTests(unittest.TestCase):
     def test_install_upgrade_uninstall_with_unicode_and_spaces(self):
         with tempfile.TemporaryDirectory(prefix='thu-shared-') as temp:
             temp = Path(temp)
-            with zipfile.ZipFile(ROOT / 'dist/tsinghua-auto-login-shared-macos.zip') as z:
+            with zipfile.ZipFile(ARCHIVE) as z:
                 z.extractall(temp / '解压 文件夹')
             package = temp / '解压 文件夹/清华网站自动重登-共享试用版'
             home = temp / '测试 用户'
             personal = home / 'Library/Application Support/TsinghuaLearnLogin/do-not-touch.txt'
             personal.parent.mkdir(parents=True); personal.write_text('personal fixture')
             install = home / 'Library/Application Support/TsinghuaAutoLoginShared'
+            packaged_host = package / 'native/host'
+            packaged_host.chmod(0o755)
             for _ in range(2):
-                subprocess.run([HOST, '--test-install', home, package], check=True, capture_output=True)
+                r = subprocess.run([packaged_host, '--test-install', home, package], capture_output=True)
+                self.assertEqual(r.returncode, 0, r.stderr.decode())
                 self.assertEqual((install / 'host').read_bytes(), HOST.read_bytes())
                 for browser in ['Google/Chrome', 'Microsoft Edge']:
                     path = home / f'Library/Application Support/{browser}/NativeMessagingHosts/{CONFIG["host"]}.json'
@@ -86,8 +103,66 @@ class NativeTests(unittest.TestCase):
                     self.assertEqual(registration['allowed_origins'], [f'chrome-extension://{CONFIG["extensionId"]}/'])
             subprocess.run([HOST, '--test-uninstall', home], check=True, capture_output=True)
             self.assertFalse(install.exists())
+            r = subprocess.run([packaged_host, '--test-install', home, package], capture_output=True)
+            self.assertEqual(r.returncode, 0, r.stderr.decode())
+            subprocess.run([packaged_host, '--test-uninstall', home], check=True, capture_output=True)
+            subprocess.run([packaged_host, '--test-uninstall', home], check=True, capture_output=True)
             self.assertEqual(personal.read_text(), 'personal fixture')
             self.assertEqual(list(home.rglob(f'{CONFIG["host"]}.json')), [])
+
+    def unpack(self, root):
+        with zipfile.ZipFile(ARCHIVE) as z:
+            z.extractall(root)
+        package = root / '清华网站自动重登-共享试用版'
+        (package / 'native/host').chmod(0o755)
+        return package
+
+    def snapshot(self, home):
+        return {str(p.relative_to(home)): hashlib.sha256(p.read_bytes()).hexdigest() for p in home.rglob('*') if p.is_file()}
+
+    def test_incomplete_or_changed_package_preserves_installation(self):
+        for change in ['missing-content', 'changed-script', 'wrong-host', 'symlink']:
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); package = self.unpack(root / 'package'); home = root / 'home'
+                subprocess.run([HOST, '--test-install', home, package], check=True, capture_output=True)
+                before = self.snapshot(home)
+                script = package / 'extension/content.js'
+                if change == 'missing-content': script.unlink()
+                elif change == 'changed-script': script.write_text('changed')
+                elif change == 'wrong-host': (package / 'native/host').write_bytes(b'not the helper')
+                else:
+                    outside = root / 'outside.js'; outside.write_bytes(script.read_bytes())
+                    script.unlink(); script.symlink_to(outside)
+                result = subprocess.run([HOST, '--test-install', home, package], capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.snapshot(home), before)
+
+    def test_failed_registration_rolls_back_complete_update(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); package = self.unpack(root / 'package'); home = root / 'home'
+            subprocess.run([HOST, '--test-install', home, package], check=True, capture_output=True)
+            install = home / 'Library/Application Support/TsinghuaAutoLoginShared'
+            (install / 'extension/old-marker').write_text('must survive failed update')
+            edge = home / 'Library/Application Support/Microsoft Edge/NativeMessagingHosts'
+            before = self.snapshot(home)
+            edge.chmod(0o500)
+            try:
+                result = subprocess.run([HOST, '--test-install', home, package], capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.snapshot(home), before)
+            finally: edge.chmod(0o700)
+            self.assertEqual(list(install.parent.glob('.install-*')), [])
+
+    def test_foreign_registration_is_not_overwritten_or_uninstalled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); package = self.unpack(root / 'package'); home = root / 'home'
+            foreign = home / f'Library/Application Support/Microsoft Edge/NativeMessagingHosts/{CONFIG["host"]}.json'
+            foreign.parent.mkdir(parents=True); foreign.write_text('{"path":"/other/application"}')
+            before = self.snapshot(home)
+            for args in [['--test-install', home, package], ['--test-uninstall', home]]:
+                result = subprocess.run([HOST, *args], capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.snapshot(home), before)
 
     def test_mismatched_package_does_not_install(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -11,6 +11,10 @@ async function badge(tabId, text, title) {
   await chrome.action.setBadgeText({tabId, text});
   await chrome.action.setTitle({tabId, title});
 }
+async function releaseSubmission(tabId) {
+  const active = await chrome.storage.session.get('submitting');
+  if (active.submitting?.tabId === tabId) await chrome.storage.session.remove('submitting');
+}
 async function handle(message, sender) {
   if (!message || typeof message.op !== 'string') return null;
   if (message.op.startsWith('vault-')) return THUCredentials.manage(chrome, message, sender);
@@ -32,10 +36,15 @@ async function handle(message, sender) {
     const credential = THU.credentialFor(state?.site, settings);
     return THUCredentials.readForPage(chrome, sender, state, credential.username, credential.role);
   }
+  if (message.op === 'ready-to-submit') {
+    if (!state?.manual && !THU.automaticAllowed(state?.site, settings)) return false;
+    return THUCredentials.readyForSubmit(chrome, sender, state, THU.credentialFor(state?.site, settings).username);
+  }
   if (message.op === 'pause') {
     if (!site) return null;
     await chrome.storage.local.set({pausedSites: {...settings.pausedSites, [site]: true}});
     if (state) await chrome.storage.session.set({[storageKey]: {...state, status: 'paused'}});
+    await releaseSubmission(tabId);
     await badge(tabId, '停', '已暂停自动登录；点击扩展按钮可重新启动');
     return null;
   }
@@ -54,6 +63,7 @@ async function handle(message, sender) {
     if (state.status === 'running' && state.expires <= Date.now()) {
       state = {...state, status: 'timeout'};
       await chrome.storage.session.set({[storageKey]: state});
+      await releaseSubmission(tabId);
       await badge(tabId, '!', '登录超时；点击扩展按钮可手动重试');
     }
     return {...state, expectedUsername: THU.credentialFor(state.site, settings).username};
@@ -75,14 +85,14 @@ async function handle(message, sender) {
   }
   if (message.op === 'done' && state?.status === 'running' && ['learn', 'info', 'mail-app'].includes(page) && (state.site || 'learn') === site) {
     await chrome.storage.session.set({[storageKey]: {...state, status: 'done'}});
-    const active = await chrome.storage.session.get('submitting');
-    if (active.submitting?.tabId === tabId) await chrome.storage.session.remove('submitting');
+    await releaseSubmission(tabId);
     await chrome.storage.local.set({retryAfter: 0});
     await badge(tabId, '✓', `已进入${THU.SITES[site].name}`);
     return true;
   }
   if (message.op === 'stop' && state?.status === 'running') {
     await chrome.storage.session.set({[storageKey]: {...state, status: 'blocked'}});
+    await releaseSubmission(tabId);
     await chrome.storage.local.set({retryAfter: Date.now() + COOLDOWN});
     await badge(tabId, '!', '自动登录已停止；请查看网页上的提示');
   }

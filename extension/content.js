@@ -90,7 +90,7 @@
   async function tick() {
     if (retired) return;
     if (!hasRuntime()) { retire(); return; }
-    if (busy || finished || document.visibilityState !== 'visible') return;
+    if (busy || finished) return;
     busy = true;
     try {
       const type = THU.kind(location.href);
@@ -118,6 +118,9 @@
         markedDone = true; return;
       }
       markedDone = false; loggedSince = null;
+      // A background tab must still acknowledge completion, so another tab can submit.
+      // Filling, navigation, and clicks remain restricted to the visible tab.
+      if (document.visibilityState !== 'visible') return;
       if ((type === 'form' && !THU.authSite(text)) ||
           (type === 'info' && !infoExpired && !infoLogin) ||
           (type === 'mail-app' && !mail.expired) ||
@@ -188,7 +191,7 @@
         filledByHelper = true;
         return;
       }
-      if (decision === 'submit' && await send({op: 'claim', action: 'submit'})) {
+      if (decision === 'submit' && await send({op: 'ready-to-submit'}) && await send({op: 'claim', action: 'submit'})) {
         if (retired || finished || userEdited) return;
         const current = assessForm(state);
         if (current.decision !== 'submit' || current.form.buttons[0] !== form.buttons[0]) {

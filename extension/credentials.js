@@ -39,6 +39,46 @@
     if (results.length !== 1 || r.frameId !== 0 || r.documentId !== sender.documentId || r.result?.url !== sender.url) return null;
     return r.result;
   }
+  async function readyForSubmit(chrome, sender, state, expectedUsername) {
+    if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) ||
+      !sender.documentId || (sender.documentLifecycle && sender.documentLifecycle !== 'active') ||
+      state?.status !== 'running' || state.expires <= Date.now() || state.steps.submit || !expectedUsername ||
+      !['form', 'mail-login'].includes(THU.kind(sender.url))) return false;
+    try {
+      const before = await inspect(chrome, sender, state, expectedUsername);
+      if (!before || before.userEdited || THU.submission(before) !== 'submit') return false;
+      // Read-only page-world probe: handlers are not visible in the content script's isolated world.
+      // It returns one boolean and never reads a username, password, request body, or stored credential.
+      const results = await chrome.scripting.executeScript({
+        target: {tabId: sender.tab.id, documentIds: [sender.documentId]}, world: 'MAIN',
+        func: () => {
+          if (document.readyState !== 'complete') return false;
+          const visible = el => el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+          const passwords = [...document.querySelectorAll('input[type=password]')].filter(visible);
+          if (passwords.length !== 1 || !passwords[0].form) return false;
+          const form = passwords[0].form;
+          const buttons = [...form.querySelectorAll('button,input[type=submit],input[type=button],a[type=button],[role=button]')]
+            .filter(el => visible(el) && /^(登录|登錄|Login|Signin)$/i.test((el.innerText || el.value || el.textContent || '').replace(/[\uE000-\uF8FF\s]+/g, '')));
+          if (buttons.length !== 1) return false;
+          const button = buttons[0];
+          if (button.disabled || button.getAttribute('aria-disabled') === 'true' || button.getAttribute('aria-busy') === 'true' ||
+            form.getAttribute('aria-busy') === 'true' || button.classList.contains('disabled')) return false;
+          if (location.hostname === 'id.tsinghua.edu.cn') {
+            // On a new browser profile, the school prepares this field asynchronously before login.
+            const fingerprint = form.querySelector('#fingerGenPrint3');
+            if (fingerprint && !fingerprint.value) return false;
+          }
+          if (typeof button.onclick === 'function' || button.type === 'submit') return true;
+          // Observed Coremail handler: $('.j-submit').click(handler). Read only its readiness flag.
+          return Object.keys(button).some(key => /^jQuery/.test(key) &&
+            button[key]?.events?.click?.some(event => typeof event.handler === 'function'));
+        }
+      });
+      if (results.length !== 1 || results[0].frameId !== 0 || results[0].documentId !== sender.documentId || results[0].result !== true) return false;
+      const after = await inspect(chrome, sender, state, expectedUsername);
+      return !!after && !after.userEdited && THU.submission(after) === 'submit';
+    } catch { return false; }
+  }
   async function readForPage(chrome, sender, state, expectedUsername, role = state?.site === 'mails' ? 'mail' : 'identity') {
     if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) ||
       !sender.documentId || (sender.documentLifecycle && sender.documentLifecycle !== 'active') || !expectedUsername ||
@@ -66,6 +106,6 @@
       return {ok: true, username: result.username, password: result.password};
     } catch { return failure('changed-page'); }
   }
-  globalThis.THUCredentials = {manage, readForPage};
+  globalThis.THUCredentials = {manage, readForPage, readyForSubmit};
   if (typeof module !== 'undefined') module.exports = globalThis.THUCredentials;
 })();

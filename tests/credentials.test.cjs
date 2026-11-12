@@ -11,11 +11,16 @@ function harness() {
   const snapshot = {url: FORM, site: 'learn', expectedUsername: 'fixture-user', username: '', passwordReady: false,
     usernameCount: 1, passwordCount: 1, buttonCount: 1, action: 'https://id.tsinghua.edu.cn/do/off/ui/auth/login/check',
     applicationText: '您即将登录 网络学堂2018', challenge: false, error: false};
-  let tab = {url: FORM}, result = {ok: true, protocol: 1, username: 'fixture-user', password: 'synthetic-secret'}, during;
+  let tab = {url: FORM}, result = {ok: true, protocol: 1, username: 'fixture-user', password: 'synthetic-secret'}, during, duringReady;
   const chrome = {runtime: {id: sender.id, getURL: p => `chrome-extension://${sender.id}/${p}`},
     tabs: {get: async () => tab},
     scripting: {executeScript: async options => {
       assert.deepEqual(JSON.parse(JSON.stringify(options.target)), {tabId: 5, documentIds: ['document-1']});
+      if (options.world === 'MAIN') {
+        assert.equal(options.args, undefined, 'no credential data is sent to the page-world readiness probe');
+        await duringReady?.();
+        return [{frameId: 0, documentId: 'document-1', result: true}];
+      }
       assert.equal(options.world, 'ISOLATED');
       return [{frameId: 0, documentId: 'document-1', result: structuredClone(snapshot)}];
     }}, storage: {
@@ -29,6 +34,8 @@ function harness() {
   return {sender, state, snapshot, calls, writes, session, local, chrome,
     setResult(r) {result = r;}, during(fn) {during = fn;}, setTab(t) {tab = t;},
     read: role => ctx.THUCredentials.readForPage(chrome, sender, state, 'fixture-user', role),
+    ready: () => ctx.THUCredentials.readyForSubmit(chrome, sender, state, 'fixture-user'),
+    duringReady(fn) {duringReady = fn;},
     manage: (message, s = {id: sender.id, url: chrome.runtime.getURL('options.html')}) => ctx.THUCredentials.manage(chrome, message, s)};
 }
 test('one exact top-level login document receives only its own credential', async () => {
@@ -36,6 +43,25 @@ test('one exact top-level login document receives only its own credential', asyn
   assert.equal(r.password, 'synthetic-secret');
   assert.deepEqual(h.calls, [{op: 'get', role: 'identity'}]);
   assert.equal(h.writes.length, 0);
+});
+test('submission readiness is a read-only check bound to the exact eligible document', async () => {
+  const h = harness();
+  Object.assign(h.snapshot, {username: 'fixture-user', passwordReady: true});
+  assert.equal(await h.ready(), true);
+  assert.deepEqual(h.calls, []);
+  h.state.steps.submit = true;
+  assert.equal(await h.ready(), false);
+  delete h.state.steps.submit;
+  h.sender.frameId = 1;
+  assert.equal(await h.ready(), false);
+});
+test('navigation, manual input and new errors during readiness checking cancel submission', async () => {
+  for (const change of [h => h.setTab({url: 'https://evil.test/'}), h => {h.snapshot.userEdited = true;}, h => {h.snapshot.error = true;}]) {
+    const h = harness(); Object.assign(h.snapshot, {username: 'fixture-user', passwordReady: true});
+    h.duringReady(() => change(h));
+    assert.equal(await h.ready(), false);
+    assert.deepEqual(h.calls, []);
+  }
 });
 test('prefilled student number does not block using the configured login-name credential', async () => {
   const h = harness();

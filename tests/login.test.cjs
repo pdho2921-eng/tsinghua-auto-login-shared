@@ -152,6 +152,35 @@ test('parallel tabs cannot submit a password at the same time', async () => {
   assert.equal(await worker.handle({op: 'claim', action: 'submit', site: 'learn'}, sender(1, FORM)), true);
   assert.equal(await worker.handle({op: 'claim', action: 'submit', site: 'learn'}, sender(2, FORM)), false);
 });
+test('a completed login in a background tab releases the next filled tab for submission', async () => {
+  const worker = background();
+  await worker.handle({op: 'begin', site: 'learn'}, sender(1, FORM));
+  await worker.handle({op: 'begin'}, sender(2, policy.SITES.mails.home));
+  assert.equal(await worker.handle({op: 'claim', action: 'submit', site: 'learn'}, sender(1, FORM)), true);
+  const window = {}; window.top = window;
+  const document = {visibilityState: 'hidden', body: {innerText: '所学课程'},
+    querySelectorAll: () => [], addEventListener() {}};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../extension/content.js'), 'utf8'), {
+    ...require('./support.cjs').contentGlobals, THU: policy, window, document, URL, Date,
+    location: {href: policy.HOME}, setInterval() {}, clearInterval() {},
+    chrome: {runtime: {id: 'test-extension', sendMessage: message => worker.handle(message, sender(1, policy.HOME))}}
+  });
+  await new Promise(setImmediate);
+  assert.equal(await worker.handle({op: 'claim', action: 'submit'}, sender(2, policy.SITES.mails.home)), true);
+});
+test('stopped, paused and timed-out attempts release their submission lease for a manual restart elsewhere', async () => {
+  for (const end of ['stop', 'pause', 'timeout']) {
+    const worker = background();
+    await worker.handle({op: 'begin', site: 'learn'}, sender(1, FORM));
+    assert.equal(await worker.handle({op: 'claim', action: 'submit', site: 'learn'}, sender(1, FORM)), true);
+    if (end === 'timeout') {
+      worker.session.values['tab:1'].expires = Date.now() - 1;
+      await worker.handle({op: 'begin', site: 'learn'}, sender(1, FORM));
+    } else await worker.handle({op: end, site: 'learn'}, sender(1, FORM));
+    await worker.click({id: 2, url: policy.SITES.mails.home});
+    assert.equal(await worker.handle({op: 'claim', action: 'submit'}, sender(2, policy.SITES.mails.home)), true);
+  }
+});
 test('explicit logout pauses future automatic attempts and frames cannot trigger actions', async () => {
   const worker = background();
   await worker.handle({op: 'pause'}, sender());

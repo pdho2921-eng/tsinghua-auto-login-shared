@@ -6,7 +6,7 @@ const root = path.resolve(__dirname, '..');
 const {extensionId} = require('../native/config.json');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'thu-slow-login-'));
 const origin = 'https://id.tsinghua.edu.cn';
-const scenarios = ['learn-load', 'info-cold', 'mail-handler', 'mail-response'];
+const scenarios = ['learn-empty-fingerprint', 'learn-load', 'info-handler', 'mail-handler', 'mail-response'];
 function fixture(scenario) {
   const mail = scenario.startsWith('mail');
   return `<!doctype html><meta charset="utf-8">
@@ -14,11 +14,11 @@ function fixture(scenario) {
     <form ${mail ? 'class="j-login-form"' : 'id="theform"'} action="${mail ? 'https://mails.tsinghua.edu.cn/coremail/index.jsp?cus=1' : origin + '/do/off/ui/auth/login/check'}">
     <input name="username"><input type="password" name="password">
     ${mail ? '<input type="hidden" name="domain" value="mails.tsinghua.edu.cn">' : '<input type="hidden" id="fingerGenPrint3">'}
-    <button type="button">登录</button></form>
+    ${mail ? '<button type="button">登录</button>' : '<a type="button" onclick="doLogin(); return false;">登录</a>'}</form>
     ${scenario === 'learn-load' ? '<img src="/fixture-delayed-image">' : ''}
     <script>
       window.attempts = 0; window.earlyClicks = 0; window.submits = 0; window.ready = false;
-      const button = document.querySelector('button');
+      const button = document.querySelector('button,a[type=button]');
       button.addEventListener('click', () => { window.attempts++; if (!window.ready) window.earlyClicks++; });
       const submit = () => { if (!window.ready) return; window.submits++; setTimeout(() => window.responded = true, ${scenario === 'mail-response' ? 3500 : 10}); };
       if (${JSON.stringify(mail)}) {
@@ -28,10 +28,13 @@ function fixture(scenario) {
           button.addEventListener('click', submit); window.ready = true;
         }, 2400);
       } else {
-        button.onclick = submit;
+        // The school's optional fingerprint field may stay empty even though login works.
+        window.doLogin = submit;
+        if (${JSON.stringify(scenario === 'info-handler')}) button.onclick = null;
         const initialize = () => setTimeout(() => {
-          document.querySelector('#fingerGenPrint3').value = 'synthetic-ready-marker'; window.ready = true;
-        }, ${scenario === 'info-cold' ? 2400 : 50});
+          if (${JSON.stringify(scenario !== 'learn-empty-fingerprint')}) document.querySelector('#fingerGenPrint3').value = 'synthetic-ready-marker';
+          button.onclick = submit; window.ready = true;
+        }, ${scenario === 'info-handler' ? 2400 : 0});
         window.addEventListener('load', initialize);
       }
     </script>`;
@@ -53,7 +56,8 @@ function fixture(scenario) {
       return route.abort();
     });
     await worker.evaluate(async () => {
-      await chrome.storage.local.set({username: 'fixture-user', automatic: true});
+      // A reinstalled extension can recover account metadata before a mode was ever saved.
+      await chrome.storage.local.set({username: 'fixture-user'});
       chrome.runtime.connectNative = () => {
         let listener;
         return {onMessage: {addListener(fn) {listener = fn;}}, onDisconnect: {addListener() {}}, disconnect() {},
@@ -70,6 +74,7 @@ function fixture(scenario) {
       await page.waitForFunction(() => window.responded === true, null, {timeout: 10000});
       assert.equal(await page.evaluate(() => window.attempts), 1, `${scenario}: repeated click`);
       assert.equal(await page.evaluate(() => window.submits), 1);
+      if (scenario === 'learn-empty-fingerprint') assert.equal(await page.locator('#fingerGenPrint3').inputValue(), '');
       await page.close();
       console.log(`PASS: ${scenario} waits for initialization and submits once`);
     }

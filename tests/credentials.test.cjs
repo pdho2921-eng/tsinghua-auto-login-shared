@@ -70,6 +70,12 @@ test('prefilled student number does not block using the configured login-name cr
   assert.equal(result.ok, true, `credential flow stopped: ${result.error}; native requests: ${h.calls.length}`);
   assert.equal(result.username, 'fixture-user');
 });
+test('a recovered account with no saved automatic preference can finish reading, while explicit off cancels', async () => {
+  const h = harness(); delete h.local.automatic;
+  assert.equal((await h.read()).ok, true);
+  h.local.automatic = false;
+  assert.equal((await h.read()).ok, false);
+});
 test('untrusted senders, child frames, inactive documents and missing document IDs cannot read', async () => {
   for (const patch of [{id: 'other'}, {frameId: 1}, {documentId: ''}, {documentLifecycle: 'prerender'},
     {url: 'http://id.tsinghua.edu.cn/'}, {url: 'https://id.tsinghua.edu.cn.evil.test/'}]) {

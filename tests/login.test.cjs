@@ -75,6 +75,14 @@ function background(local = storage({username: 'test-user', mailUsername: 'test-
   return {context, local, session, navigations, created, click: tab => click(tab), handle: (op, sender) => context.handle(op, sender)};
 }
 const sender = (tab = 1, url = policy.HOME) => ({id: 'test-extension', frameId: 0, tab: {id: tab}, url});
+test('recovered accounts use the settings default when automatic is absent, but explicit off stays off', async () => {
+  for (const site of Object.keys(policy.SITES)) {
+    const worker = background(storage({username: 'test-user'}));
+    assert.equal((await worker.handle({op: 'begin'}, sender(7, policy.SITES[site].home)))?.status, 'running');
+    await worker.local.set({automatic: false});
+    assert.equal(await worker.handle({op: 'begin'}, sender(8, policy.SITES[site].home)), null);
+  }
+});
 test('clicking the toolbar on the extension settings page leaves the page and login state unchanged', async () => {
   for (const url of ['chrome-extension://test-extension/options.html', undefined]) {
     const worker = background(undefined, undefined, null, 'chrome-extension://test-extension/options.html');

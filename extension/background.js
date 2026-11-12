@@ -21,7 +21,8 @@ async function handle(message, sender) {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !sender.tab || THU.kind(sender.url) === 'other') return null;
   if (message.op === 'open-settings') { await chrome.runtime.openOptionsPage(); return true; }
   const tabId = sender.tab.id, storageKey = key(tabId);
-  const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: false, siteAutomatic: {}, paused: false, pausedSites: {}, retryAfter: 0});
+  // Match the settings page after recovering existing Keychain accounts on a fresh install.
+  const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: true, siteAutomatic: {}, paused: false, pausedSites: {}, retryAfter: 0});
   const stored = await chrome.storage.session.get(storageKey);
   let state = stored[storageKey];
   const page = THU.kind(sender.url);

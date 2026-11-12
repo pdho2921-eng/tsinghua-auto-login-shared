@@ -63,11 +63,9 @@
           const button = buttons[0];
           if (button.disabled || button.getAttribute('aria-disabled') === 'true' || button.getAttribute('aria-busy') === 'true' ||
             form.getAttribute('aria-busy') === 'true' || button.classList.contains('disabled')) return false;
-          if (location.hostname === 'id.tsinghua.edu.cn') {
-            // On a new browser profile, the school prepares this field asynchronously before login.
-            const fingerprint = form.querySelector('#fingerGenPrint3');
-            if (fingerprint && !fingerprint.value) return false;
-          }
+          // The school's optional #fingerGenPrint3 can remain empty on a fresh Mac.
+          // Its own login handler still accepts the form and handles any extra verification.
+          // Do not turn that field into an extension-only prerequisite for clicking Login.
           if (typeof button.onclick === 'function' || button.type === 'submit') return true;
           // Observed Coremail handler: $('.j-submit').click(handler). Read only its readiness flag.
           return Object.keys(button).some(key => /^jQuery/.test(key) &&
@@ -96,7 +94,7 @@
       const after = await inspect(chrome, sender, state, expectedUsername);
       const latest = (await chrome.storage.session.get(`tab:${sender.tab.id}`))[`tab:${sender.tab.id}`];
       if (!latest || latest.status !== 'running' || latest.expires !== state.expires || latest.steps.submit) return failure('changed-page');
-      const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: false, siteAutomatic: {}});
+      const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: true, siteAutomatic: {}});
       const currentCredential = THU.credentialFor(state.site, settings);
       if ((!state.manual && !THU.automaticAllowed(state.site, settings)) || currentCredential.role !== role ||
         !sameAccount(currentCredential.username, expectedUsername, state.site)) return failure('changed-page');

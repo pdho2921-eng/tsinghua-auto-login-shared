@@ -4,7 +4,11 @@
 
 用户已确认 Windows 11、Intel x64、Edge；由同学在 Windows 电脑测试，用户转交安装包。采用当前用户 DPAPI，不缩小协议密码长度。保留现有设置页布局，仅替换必需的平台说明。Mac 与 Windows 分别分发，安装包仅含相应系统的文件。
 
-Windows 助手版本独立记录在 `native/windows/config.json`。`native/config.json` 仍记录共享主机名、扩展 ID、协议，以及 Mac 助手版本。共享扩展版本为 0.1.6，Windows 助手为 0.1.0，Mac 助手为 0.1.3，通信协议仍为 1。
+Windows 助手版本与 Windows 扩展版本独立记录在 `native/windows/config.json`。`native/config.json` 仍记录共享主机名、扩展 ID、协议，以及 Mac 助手版本。当前 Windows 扩展为 0.1.7，Windows 助手为 0.1.0；Mac 已交付包继续使用扩展 0.1.6、助手 0.1.3，通信协议仍为 1。用户最新要求本轮不修改 Mac 包。Windows 构建按平台覆盖 manifest 与页尾版本；共用源码的 Mac 分支保留既有行为。
+
+0.1.7 的 Windows 设置页首次连接成功与手动检查成功都会显示浮动提示，保存／删除后的后台检查保持安静。三个网站链接发送受限的 `open-site` 请求，只允许 Windows 设置页的精确来源和顶层页面使用，拒绝任意 URL。后台先创建空白标签页并保存一次手动尝试，再导航到固定网站入口，避免快速重定向先遇到旧冷却状态。主动启动不修改自动开关、退出暂停或普通自动尝试的等待时间；不抢占其他标签页的提交占用。失败时清理空白标签页和状态，并向设置页明确返回错误。
+
+连续登录回归见 `tests/settings-launch.browser.cjs`，测试使用虚拟学校页面和虚拟密码，依次完成网络学堂、信息门户、邮箱、再次网络学堂，均在二次验证处停止并关闭标签页。网站之间不清空状态。它补上了此前逐站测试清除状态而遗漏的路径。
 
 ## 实现
 
@@ -36,6 +40,15 @@ dotnet run --project native/windows/Tests/Tests.csproj -c Release
 dotnet run --project native/windows/Tests/Tests.csproj -c Release -- --payload build/windows/payload.zip
 node --test tests/*.test.cjs
 ```
+
+浏览器回归需安装 `playwright-core` 及其 Chromium。将 `build/windows/payload.zip` 解压到 `build/windows/acceptance-payload`，指定其中的 Windows 扩展副本；不要用根目录仍标为 Mac 0.1.6 的源副本代替待交付文件：
+
+```sh
+THU_TEST_EXTENSION="$PWD/build/windows/acceptance-payload/extension" node tests/settings-launch.browser.cjs all
+THU_TEST_EXTENSION="$PWD/build/windows/acceptance-payload/extension" node tests/windows-package.browser.cjs
+```
+
+前者在同一份浏览器状态中连续提交四次并逐次核对二次验证停止，后者检查 Windows 文案、版本与页面显示。测试只使用虚拟学校页面和虚拟凭据。
 
 生产助手只能在 Windows 上验证。Mac 上通过的协议测试、模拟注册表测试、PE 文件检查、Chromium 页面测试都不能替代以下验收：
 

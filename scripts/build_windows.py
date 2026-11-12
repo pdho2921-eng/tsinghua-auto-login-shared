@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import zipfile
 
-from package_shared import ROOT, prepare_extension, privacy, start_page, update_checksums
+from package_shared import ROOT, extension_manifest, prepare_extension, privacy, start_page, update_checksums
 
 
 def main():
@@ -36,7 +36,7 @@ def main():
 
     config = json.loads((ROOT / 'native/config.json').read_text())
     windows = json.loads((ROOT / 'native/windows/config.json').read_text())
-    manifest = json.loads((ROOT / 'extension/manifest.json').read_text())
+    manifest = extension_manifest('windows')
     identity = ''.join(chr(97 + int(c, 16)) for c in hashlib.sha256(base64.b64decode(manifest['key'], validate=True)).hexdigest()[:32])
     if identity != config['extensionId']:
         raise ValueError('Extension public key and host allowlist do not match')

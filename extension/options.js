@@ -143,5 +143,24 @@ void chrome.storage.local.get({automatic: true, siteAutomatic: {}}).then(setting
   $('automatic').checked = settings.automatic;
   for (const site of Object.keys(THU.SITES)) $(`auto-${site}`).checked = settings.siteAutomatic[site] !== false;
 });
-void check();
+if (THUPlatform.isWindows) {
+  let openingSite = false;
+  const links = [...document.querySelectorAll('[data-open-site]')];
+  for (const link of links) link.addEventListener('click', async event => {
+    event.preventDefault();
+    if (openingSite) return;
+    openingSite = true;
+    links.forEach(el => {el.setAttribute('aria-disabled', 'true'); el.setAttribute('aria-busy', 'true');});
+    $('site-mode-result').textContent = '';
+    try {
+      const result = await send({op: 'open-site', site: link.dataset.openSite});
+      if (!result?.ok) $('site-mode-result').textContent = result?.error === 'not-found'
+        ? messageFor(result) : '未能打开网站，请稍后重试。';
+    } finally {
+      openingSite = false;
+      links.forEach(el => {el.removeAttribute('aria-disabled'); el.removeAttribute('aria-busy');});
+    }
+  });
+}
+void check({notifySuccess: THUPlatform.isWindows});
 syncFieldTools();

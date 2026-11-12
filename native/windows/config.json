@@ -1,5 +1,6 @@
 {
   "version": "0.1.0",
+  "extensionVersion": "0.1.7",
   "runtime": "win-x64",
   "target": "Windows 11 x64 / Microsoft Edge",
   "storage": "current-user-dpapi"

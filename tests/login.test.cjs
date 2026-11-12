@@ -61,20 +61,74 @@ function storage(seed = {}) {
     async remove(key) { delete values[key]; }
   };
 }
-function background(local = storage({username: 'test-user', mailUsername: 'test-user', automatic: true}), session = storage(), tabContext = null, tabURL = null) {
+function background(local = storage({username: 'test-user', mailUsername: 'test-user', automatic: true}), session = storage(), tabContext = null, tabURL = null, isWindows = false) {
   const event = {addListener() {}};
   let click;
-  const navigations = [], created = [];
-  const context = vm.createContext({THU: policy, importScripts() {}, Date, Promise,
-    chrome: {storage: {local, session}, runtime: {id: 'test-extension', onMessage: event, onInstalled: event, async openOptionsPage() {}},
+  const navigations = [], created = [], removed = [];
+  const context = vm.createContext({THU: policy, THUPlatform: {isWindows}, THUCredentials: require('../extension/credentials.js'), importScripts() {}, Date, Promise,
+    chrome: {storage: {local, session}, runtime: {id: 'test-extension', getURL: file => `chrome-extension://test-extension/${file}`, onMessage: event, onInstalled: event, async openOptionsPage() {}},
       alarms: {onAlarm: event},
       action: {onClicked: {addListener(fn) { click = fn; }}, async setBadgeText() {}, async setTitle() {}},
       tabs: {onRemoved: event, async get(id) {return {id, url: tabURL};}, async sendMessage() { return tabContext; }, async create(data) { created.push(data); return {id: 99}; },
-        async update(id, data) { navigations.push({id, ...data}); }}}});
+        async update(id, data) { navigations.push({id, ...data}); }, async remove(id) { removed.push(id); }}}});
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8'), context);
-  return {context, local, session, navigations, created, click: tab => click(tab), handle: (op, sender) => context.handle(op, sender)};
+  return {context, local, session, navigations, created, removed, click: tab => click(tab), handle: (op, sender) => context.handle(op, sender)};
 }
 const sender = (tab = 1, url = policy.HOME) => ({id: 'test-extension', frameId: 0, tab: {id: tab}, url});
+const settingsSender = () => sender(5, 'chrome-extension://test-extension/options.html');
+test('Windows settings starts one explicit login after 2FA without lifting the ordinary automatic cooldown', async () => {
+  for (const site of Object.keys(policy.SITES)) {
+    const worker = background(undefined, undefined, null, null, true);
+    await worker.handle({op: 'begin', site: 'learn'}, sender(1, FORM));
+    assert.equal(await worker.handle({op: 'claim', action: 'submit', site: 'learn'}, sender(1, FORM)), true);
+    await worker.handle({op: 'stop', site: 'learn'}, sender(1, FORM));
+    await worker.session.remove('tab:1'); // School tab is now closed; the cooldown is intentionally retained.
+    const retryAfter = worker.local.values.retryAfter;
+    assert.equal(await worker.handle({op: 'begin'}, sender(6, policy.SITES[site].home)), null);
+    await worker.local.set({automatic: false, siteAutomatic: {[site]: false}, pausedSites: {[site]: true}});
+    const result = await worker.handle({op: 'open-site', site}, settingsSender());
+    assert.equal(result.ok, true);
+    assert.equal(worker.created[0].url, 'about:blank');
+    assert.equal(worker.navigations[0].url, policy.SITES[site].home);
+    const started = await worker.handle({op: 'begin', site}, sender(99, site === 'mails' ? policy.SITES[site].home : FORM));
+    assert.equal(started.manual, true); assert.equal(started.status, 'running');
+    assert.equal(worker.local.values.automatic, false);
+    assert.equal(worker.local.values.retryAfter, retryAfter);
+    assert.equal(worker.local.values.pausedSites[site], true);
+    assert.equal(await worker.handle({op: 'claim', action: 'submit', site}, sender(99, site === 'mails' ? policy.SITES[site].home : FORM)), true);
+    assert.equal(await worker.handle({op: 'claim', action: 'submit', site}, sender(99, site === 'mails' ? policy.SITES[site].home : FORM)), false);
+  }
+});
+test('settings launch state exists before school navigation and does not take another tab submission lease', async () => {
+  const worker = background(undefined, undefined, null, null, true);
+  await worker.session.set({submitting: {tabId: 8, until: Date.now() + 10000}});
+  worker.context.chrome.tabs.update = async (id, data) => {
+    assert.equal(data.url, policy.HOME); assert.equal(worker.session.values[`tab:${id}`].manual, true);
+  };
+  assert.equal((await worker.handle({op: 'open-site', site: 'learn'}, settingsSender())).ok, true);
+  assert.equal(await worker.handle({op: 'claim', site: 'learn', action: 'submit'}, sender(99, FORM)), false);
+  assert.equal(worker.session.values.submitting.tabId, 8);
+});
+test('settings launch rejects pages, frames, arbitrary destinations and stays unavailable on Mac', async () => {
+  const worker = background(undefined, undefined, null, null, true);
+  for (const untrusted of [sender(), {...settingsSender(), frameId: 1}, {...settingsSender(), id: 'foreign'}, sender(5, 'chrome-extension://test-extension/preview.html')])
+    assert.equal((await worker.handle({op: 'open-site', site: 'learn'}, untrusted)).ok, false);
+  for (const message of [{op:'open-site',site:'other'}, {op:'open-site',site:'learn',url:'https://other.test/'}, {op:'open-site',site:'__proto__'}])
+    assert.equal((await worker.handle(message, settingsSender())).ok, false);
+  assert.equal(worker.created.length, 0);
+  const mac = background();
+  assert.equal((await mac.handle({op: 'open-site', site: 'learn'}, settingsSender())).ok, false);
+  assert.equal(mac.created.length, 0);
+});
+test('missing credentials and failed opening leave no blank tab or login state', async () => {
+  const empty = background(storage({username:'',mailUsername:''}), undefined, null, null, true);
+  assert.equal((await empty.handle({op: 'open-site', site: 'learn'}, settingsSender())).error, 'not-found');
+  assert.equal(empty.created.length, 0);
+  const worker = background(undefined, undefined, null, null, true);
+  worker.context.chrome.tabs.update = async () => {throw new Error('tab closed');};
+  assert.equal((await worker.handle({op: 'open-site', site: 'learn'}, settingsSender())).error, 'open-failed');
+  assert.deepEqual(worker.removed, [99]); assert.equal(worker.session.values['tab:99'], undefined);
+});
 test('recovered accounts use the settings default when automatic is absent, but explicit off stays off', async () => {
   for (const site of Object.keys(policy.SITES)) {
     const worker = background(storage({username: 'test-user'}));

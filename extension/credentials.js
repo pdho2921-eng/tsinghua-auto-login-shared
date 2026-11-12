@@ -104,6 +104,6 @@
       return {ok: true, username: result.username, password: result.password};
     } catch { return failure('changed-page'); }
   }
-  globalThis.THUCredentials = {manage, readForPage, readyForSubmit};
+  globalThis.THUCredentials = {isSettings, manage, readForPage, readyForSubmit};
   if (typeof module !== 'undefined') module.exports = globalThis.THUCredentials;
 })();

@@ -15,8 +15,34 @@ async function releaseSubmission(tabId) {
   const active = await chrome.storage.session.get('submitting');
   if (active.submitting?.tabId === tabId) await chrome.storage.session.remove('submitting');
 }
+async function openSiteFromSettings(message, sender) {
+  if (!globalThis.THUPlatform?.isWindows || !THUCredentials.isSettings(chrome, sender)) return {ok: false, error: 'denied'};
+  if (Object.keys(message).length !== 2 || !Object.hasOwn(THU.SITES, message.site || '')) return {ok: false, error: 'invalid-request'};
+  const site = message.site;
+  const settings = await chrome.storage.local.get({username: '', mailUsername: ''});
+  if (!THU.credentialFor(site, settings).username) return {ok: false, error: 'not-found'};
+  let tabId;
+  try {
+    // Register this explicit attempt before loading a school page. A very fast
+    // redirect must not see the previous automatic cooldown and retire its script.
+    const tab = await chrome.tabs.create({url: 'about:blank', active: false});
+    if (!Number.isInteger(tab?.id) || tab.id < 0) throw new Error('Missing tab');
+    tabId = tab.id;
+    await chrome.storage.session.set({[key(tabId)]: fresh(site, true)});
+    await badge(tabId, '', `正在重新进入${THU.SITES[site].name}`);
+    await chrome.tabs.update(tabId, {url: THU.SITES[site].home, active: true});
+    return {ok: true};
+  } catch {
+    if (tabId !== undefined) {
+      try { await chrome.storage.session.remove(key(tabId)); } catch { /* no credentials in this state */ }
+      try { await chrome.tabs.remove(tabId); } catch { /* already closed */ }
+    }
+    return {ok: false, error: 'open-failed'};
+  }
+}
 async function handle(message, sender) {
   if (!message || typeof message.op !== 'string') return null;
+  if (message.op === 'open-site') return openSiteFromSettings(message, sender);
   if (message.op.startsWith('vault-')) return THUCredentials.manage(chrome, message, sender);
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !sender.tab || THU.kind(sender.url) === 'other') return null;
   if (message.op === 'open-settings') { await chrome.runtime.openOptionsPage(); return true; }

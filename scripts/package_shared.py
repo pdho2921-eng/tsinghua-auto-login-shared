@@ -1,10 +1,19 @@
 """Build platform-specific distribution copies from one maintained extension source."""
 from pathlib import Path
 import hashlib
+import json
 import re
 import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def extension_manifest(platform: str):
+    manifest = json.loads((ROOT / 'extension/manifest.json').read_text())
+    if platform == 'windows':
+        config = json.loads((ROOT / 'native/windows/config.json').read_text())
+        manifest['version'] = config.get('extensionVersion', manifest['version'])
+    return manifest
 
 
 def prepare_extension(destination: Path, platform: str):
@@ -22,6 +31,8 @@ def prepare_extension(destination: Path, platform: str):
     content = re.sub(r'  const isWindows = .*?;\n', f'  const isWindows = {str(platform == "windows").lower()};\n', content, count=1)
     script.write_text(content)
     if platform == 'windows':
+        manifest = extension_manifest(platform)
+        (destination / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
         replacements = {
             '解压完整试用包，双击“安装.command”，等待显示安装完成。': '解压完整试用包，双击“安装.exe”，等待显示安装完成。',
             '如提示钥匙串锁定，请在 Mac 的“钥匙串访问”中解锁登录钥匙串；如刚更新助手，请重新保存密码。': '如提示无法访问已保存凭据，请确认正在使用原 Windows 账号；必要时重新保存密码。',
@@ -31,6 +42,8 @@ def prepare_extension(destination: Path, platform: str):
         }
         options = destination / 'options.html'
         text = options.read_text()
+        source_version = extension_manifest('macos')['version']
+        text = text.replace('扩展版本 ' + source_version, '扩展版本 ' + manifest['version'])
         for old, new in replacements.items():
             if old not in text:
                 raise ValueError('Platform copy needs review: ' + old)

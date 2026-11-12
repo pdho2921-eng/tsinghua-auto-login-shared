@@ -15,6 +15,11 @@
     'manual-input': '检测到你正在修改登录信息，自动登录已暂停。',
     'denied': '当前页面不符合自动填写条件。'
   };
+  if (globalThis.THUPlatform?.isWindows) {
+    errors['keychain-locked'] = 'Windows 无法读取已保存凭据。请确认当前 Windows 账号，必要时重新保存密码。';
+    errors['storage-error'] = '未能访问 Windows 加密保存的凭据。请确认当前 Windows 账号，必要时重新保存密码。';
+    errors['helper-timeout'] = '本机助手没有及时响应。请关闭浏览器后重新打开，再检查连接。';
+  }
   async function call(chrome, request) {
     return new Promise(resolve => {
       let port, settled = false;

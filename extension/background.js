@@ -1,4 +1,4 @@
-importScripts('policy.js', 'native.js', 'credentials.js');
+importScripts('policy.js', 'platform.js', 'native.js', 'credentials.js');
 // Ordinary settings remain inaccessible to website content scripts.
 void chrome.storage.local.setAccessLevel?.({accessLevel: 'TRUSTED_CONTEXTS'});
 const TTL = 120_000;

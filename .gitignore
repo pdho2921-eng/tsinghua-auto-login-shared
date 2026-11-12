@@ -6,3 +6,5 @@ node_modules/
 *.keychain-db
 *.pem
 __pycache__/
+native/windows/**/bin/
+native/windows/**/obj/

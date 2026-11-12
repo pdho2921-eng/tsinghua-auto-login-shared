@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+THUPlatform.apply(document);
 const roles = ['identity', 'mail'];
 let checking = false;
 let connectionNoticeTimer;
@@ -84,7 +85,7 @@ for (const role of roles) {
     controls.forEach(el => { el.disabled = true; });
     form.dataset.busy = 'true';
     form.querySelector('[type=submit]').setAttribute('aria-busy', 'true');
-    $(`${role}-result`).textContent = '正在保存到登录钥匙串…';
+    $(`${role}-result`).textContent = THUPlatform.saving;
     try {
       const request = {op: 'vault-save', role, username, password: passwordField.value};
       passwordField.value = '';
@@ -108,7 +109,7 @@ for (const role of roles) {
     $(`${role}-delete`).setAttribute('aria-busy', 'true');
     const result = await send({op: 'vault-delete', role});
     if (result?.ok) $(`${role}-username`).value = '';
-    $(`${role}-result`).textContent = result?.ok ? '已从登录钥匙串删除。' : messageFor(result);
+    $(`${role}-result`).textContent = result?.ok ? THUPlatform.deleted : messageFor(result);
     $(`${role}-result`).dataset.state = result?.ok ? 'success' : 'error';
     $(`${role}-delete`).removeAttribute('aria-busy');
     await check();

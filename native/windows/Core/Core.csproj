@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="../../../build/windows/BuildInfo.cs" Link="BuildInfo.cs" />
+  </ItemGroup>
+</Project>

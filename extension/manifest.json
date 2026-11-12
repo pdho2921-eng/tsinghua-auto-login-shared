@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
   "name": "清华网站自动重登 · 共享试用版",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "description": "自动恢复网络学堂、信息门户和学生邮箱的登录；密码保存在本机系统钥匙串。",
+  "description": "自动恢复网络学堂、信息门户和学生邮箱的登录；密码保存在本机系统加密存储。",
   "permissions": [
     "storage",
     "activeTab",
@@ -37,6 +37,7 @@
       ],
       "js": [
         "policy.js",
+        "platform.js",
         "native.js",
         "notice.js",
         "content.js"

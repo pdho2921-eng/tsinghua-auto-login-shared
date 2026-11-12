@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><AssemblyName>TsinghuaLoginSetup</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+    <EmbeddedResource Include="../../../build/windows/payload.zip" LogicalName="payload.zip" />
+    <Compile Include="../../../build/windows/PayloadInfo.cs" Link="PayloadInfo.cs" />
+  </ItemGroup>
+</Project>

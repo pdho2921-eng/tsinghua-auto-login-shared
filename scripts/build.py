@@ -10,18 +10,21 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from package_shared import prepare_extension, privacy, update_checksums
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build'
 DIST = ROOT / 'dist'
 config = json.loads((ROOT / 'native/config.json').read_text())
 manifest = json.loads((ROOT / 'extension/manifest.json').read_text())
-extension_hashes = {}
-for item in sorted((ROOT / 'extension').rglob('*')):
+BUILD.mkdir(exist_ok=True)
+extension_source = BUILD / 'macos-extension'
+extension_hashes = prepare_extension(extension_source, 'macos')
+for item in sorted(extension_source.rglob('*')):
     if item.is_symlink():
         raise ValueError('Extension package must not contain symbolic links')
     if item.is_file() and item.name != '.DS_Store':
-        extension_hashes[str(item.relative_to(ROOT / 'extension'))] = hashlib.sha256(item.read_bytes()).hexdigest()
+        extension_hashes[str(item.relative_to(extension_source))] = hashlib.sha256(item.read_bytes()).hexdigest()
 identity_hash = hashlib.sha256(base64.b64decode(manifest['key'], validate=True)).hexdigest()[:32]
 identity = ''.join(chr(97 + int(digit, 16)) for digit in identity_hash)
 if identity != config['extensionId']:
@@ -52,22 +55,22 @@ run(str(BUILD / 'host'), '--self-test')
 with tempfile.TemporaryDirectory(prefix='package-', dir=BUILD) as temp:
     package = Path(temp) / '清华网站自动重登-共享试用版'
     package.mkdir()
-    shutil.copytree(ROOT / 'extension', package / 'extension', ignore=shutil.ignore_patterns('.DS_Store'))
+    shutil.copytree(extension_source, package / 'extension', ignore=shutil.ignore_patterns('.DS_Store'))
     (package / 'native').mkdir()
     shutil.copy2(BUILD / 'host', package / 'native/host')
     for name in ['安装.command', '卸载.command', '开始使用.html']:
         shutil.copy2(ROOT / name, package / name)
-    for name in ['README.md', 'PRIVACY.md', 'HANDOFF_WINDOWS.md']:
-        shutil.copy2(ROOT / name, package / name)
-    (package / 'docs').mkdir()
-    for name in ['DEVELOPMENT.md', 'VALIDATION.md', '界面检查清单.md']:
-        shutil.copy2(ROOT / 'docs' / name, package / 'docs' / name)
+    shutil.copy2(ROOT / 'docs/MACOS.md', package / 'README.md')
+    (package / 'PRIVACY.md').write_text(privacy('macos'))
     archive = Path(temp) / 'tsinghua-auto-login-shared-macos.zip'
     # Explicit UTF-8 filenames and POSIX mode bits, without Finder resource forks.
     with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as output:
         for item in sorted(package.rglob('*')):
             if item.is_file():
                 output.write(item, str(item.relative_to(package.parent)))
+    with zipfile.ZipFile(archive) as check:
+        if check.testzip() is not None or any(n.endswith(('.exe', '.cs', '.ps1')) or 'HANDOFF_WINDOWS' in n for n in check.namelist()):
+            raise ValueError('Invalid or mixed-platform Mac package')
     # Test the bytes recipients receive, including uninstall and reinstall, before publishing.
     environment = dict(os.environ, THU_TEST_HOST=str(BUILD / 'host'), THU_TEST_ARCHIVE=str(archive))
     subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'native_test.py', '-v'],
@@ -76,5 +79,5 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=BUILD) as temp:
     os.replace(archive, final_archive)
 archive = final_archive
 digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-(DIST / 'SHA256SUMS.txt').write_text(f'{digest}  {archive.name}\n')
+update_checksums(DIST)
 print(f'Built {archive} ({archive.stat().st_size:,} bytes)')

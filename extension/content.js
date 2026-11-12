@@ -1,6 +1,6 @@
 (() => {
   if (window.top !== window || THU.kind(location.href) === 'other') return;
-  const context = () => ({site: THU.siteFor(location.href, document.body?.innerText || '')});
+  const context = () => ({site: THU.siteFor(location.href, document.body?.innerText || ''), applicationText: THU.authApplication(document.body?.innerText || '') ? '您即将登录 ' + THU.authApplication(document.body.innerText) : ''});
   let activeSite = context().site;
   let busy = false, finished = false, retired = false, timer;
   let fillRequested = false, filledByHelper = false, userEdited = false, markedDone = false, loggedSince = null;
@@ -56,7 +56,7 @@
     const form = getForm();
     const challenge = [...document.querySelectorAll('input,iframe')].some(el => visible(el) && /captcha|验证码|短信验证|一次性|one.time.code|\botp\b/i.test([el.name, el.id, el.placeholder, el.autocomplete, el.title, el.src].join(' '))) || /请(?:输入|完成).{0,10}(?:验证码|二次验证)|请使用企业微信|请进行身份验证/.test(text);
     const error = /(?:密码|用户名|账号).{0,8}(?:错误|不正确|不存在)|登录失败|尝试次数|账户.{0,6}锁定/.test(text);
-    const snapshot = {url: location.href, site: state.site || activeSite, applicationText: THU.authSite(text) === 'learn' ? '您即将登录 网络学堂2018' : THU.authSite(text) === 'info' ? '您即将登录 清华大学信息门户' : '', expectedUsername: state.expectedUsername,
+    const snapshot = {url: location.href, site: state.site || activeSite, applicationText: THU.authApplication(text) ? '您即将登录 ' + THU.authApplication(text) : '', expectedUsername: state.expectedUsername,
       usernameCount: form.usernames.length, passwordCount: form.passwords.length, buttonCount: form.buttons.length,
       username: form.usernames[0]?.value, passwordReady: !!form.passwords[0]?.value,
       action: form.action, mailForm: form.mailForm, mailDomain: form.mailDomain, challenge, error, userEdited};
@@ -109,6 +109,7 @@
       const infoLogin = type === 'info' && [...document.querySelectorAll('.onload')].some(el => visible(el) && isLogin(el));
       const loggedIn = (type === 'learn' && text.includes('所学课程') && !text.includes('您未登录或登录失效')) ||
         (type === 'info' && !infoExpired && !infoLogin && text.includes('退出') && text.includes('我的工作台')) ||
+        (type === 'webvpn' && text.includes('清华大学WebVPN') && text.includes('常用网站') && text.includes('欢迎您')) ||
         (type === 'mail-app' && !mail.expired && text.includes('收件箱') && /写\s*信/.test(text));
       if (loggedIn) {
         // Portal/mail shells appear before their async session checks finish.
@@ -124,7 +125,7 @@
       if ((type === 'form' && !THU.authSite(text)) ||
           (type === 'info' && !infoExpired && !infoLogin) ||
           (type === 'mail-app' && !mail.expired) ||
-          ['redirect', 'info-redirect'].includes(type)) return;
+          ['redirect', 'info-redirect', 'webvpn'].includes(type)) return;
       const state = await send({op: 'begin'});
       if (!state || state.status !== 'running') {
         if (state?.status === 'timeout') await stop(THUNotice.messages['login-timeout']);
@@ -146,7 +147,7 @@
         return;
       }
       if (type === 'info') {
-        if (await send({op: 'claim', action: 'info-login'})) location.assign(THU.SITES.info.login);
+        if (await send({op: 'claim', action: 'info-login'})) location.assign(THU.infoLoginURL(location.href));
         return;
       }
       if (type === 'mail-app') {
@@ -191,7 +192,7 @@
         filledByHelper = true;
         return;
       }
-      if (decision === 'submit' && await send({op: 'ready-to-submit'}) && await send({op: 'claim', action: 'submit'})) {
+      if (decision === 'submit' && await send({op: 'ready-to-submit'}) && await send({op: 'claim', action: THU.submitAction(snapshot)})) {
         if (retired || finished || userEdited) return;
         const current = assessForm(state);
         if (current.decision !== 'submit' || current.form.buttons[0] !== form.buttons[0]) {

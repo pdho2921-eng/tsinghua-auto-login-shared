@@ -272,3 +272,31 @@ test('a still-loading identity tab never defaults to the wrong website', async (
   await worker.click({id: 42, url: FORM});
   assert.equal(worker.navigations[0].url, INFO);
 });
+
+const VPN = 'https://webvpn.tsinghua.edu.cn/';
+const VPN_INFO = VPN + 'https/77726476706e69737468656265737421f9f9479369247b59700f81b9991b2631506205de';
+test('WEBVPN auth and only the observed proxied portal belong to the info switch', () => {
+  assert.equal(policy.siteFor(FORM, '您即将登录 WEBVPN'), 'info');
+  assert.equal(policy.submission({...snapshot(), site: 'info', applicationText: '您即将登录 WEBVPN'}), 'submit');
+  for (const label of ['WEBVPN2', 'OTHER WEBVPN', 'WEBVPN钓鱼']) assert.equal(policy.authSite('您即将登录 ' + label), null);
+  assert.equal(policy.kind(VPN), 'webvpn');
+  assert.equal(policy.siteFor(VPN), 'info');
+  assert.equal(policy.kind(VPN_INFO + '/f/info/gxfw_fg/common/index'), 'info');
+  assert.equal(policy.kind(VPN + 'https/unrelated/f/info/example'), 'other');
+  assert.equal(policy.submission({...snapshot(), url: VPN_INFO + '/do/off/ui/auth/login/form/fixture/0'}), 'wrong-page');
+});
+test('portal and WEBVPN submit once each, share cooldown and completion, and obey the info switch', async () => {
+  const worker = background();
+  const formSender = sender(7, FORM);
+  await worker.handle({op: 'begin', site: 'info'}, formSender);
+  assert.equal(await worker.handle({op: 'claim', site: 'info', action: 'submit'}, formSender), true);
+  assert.equal(await worker.handle({op: 'claim', site: 'info', action: 'submit-webvpn'}, formSender), true);
+  assert.equal(await worker.handle({op: 'claim', site: 'info', action: 'submit-webvpn'}, formSender), false);
+  assert.equal(await worker.handle({op: 'done'}, sender(7, VPN)), true);
+  assert.equal(worker.local.values.retryAfter, 0);
+  await worker.local.set({siteAutomatic: {info: false}});
+  assert.equal(await worker.handle({op: 'begin'}, sender(8, VPN)), null);
+  await worker.click({id: 8, url: VPN});
+  assert.equal(worker.navigations[0].url, VPN);
+  assert.equal(worker.session.values['tab:8'].manual, true);
+});

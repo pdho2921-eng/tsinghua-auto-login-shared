@@ -56,7 +56,7 @@ async function handle(message, sender) {
       return {status: 'unconfigured'};
     }
     if (!state || state.status === 'done' || (['blocked', 'timeout'].includes(state.status) && state.expires <= Date.now() && settings.retryAfter <= Date.now())) {
-      const eligible = !!site && (['learn', 'entry', 'info', 'mail-login', 'mail-app'].includes(page) || page === 'form');
+      const eligible = !!site && (['learn', 'entry', 'info', 'webvpn', 'mail-login', 'mail-app'].includes(page) || page === 'form');
       if (!eligible || !settings.automatic || settings.pausedSites[site] || (site === 'learn' && settings.paused) || settings.retryAfter > Date.now()) return null;
       state = fresh(site);
       await chrome.storage.session.set({[storageKey]: state});
@@ -72,10 +72,11 @@ async function handle(message, sender) {
   if (message.op === 'claim') {
     if (!site || !state || (state.site || 'learn') !== site || !THU.actionAllowed(page, message.action)) return false;
     if (!state.manual && !THU.automaticAllowed(site, settings)) return false;
+    if (message.action === 'submit-webvpn' && site !== 'info') return false;
     const next = THU.claim(state, message.action, Date.now());
     if (!next) return false;
     // Commit before clicking. Survives navigation, service-worker sleep, and concurrent messages.
-    if (message.action === 'submit') {
+    if (['submit', 'submit-webvpn'].includes(message.action)) {
       const active = await chrome.storage.session.get('submitting');
       if (active.submitting && active.submitting.until > Date.now() && active.submitting.tabId !== tabId) return false;
       await chrome.storage.session.set({submitting: {tabId, until: Date.now() + TTL}});
@@ -84,7 +85,7 @@ async function handle(message, sender) {
     await chrome.storage.session.set({[storageKey]: next});
     return true;
   }
-  if (message.op === 'done' && state?.status === 'running' && ['learn', 'info', 'mail-app'].includes(page) && (state.site || 'learn') === site) {
+  if (message.op === 'done' && state?.status === 'running' && ['learn', 'info', 'webvpn', 'mail-app'].includes(page) && (state.site || 'learn') === site) {
     await chrome.storage.session.set({[storageKey]: {...state, status: 'done'}});
     await releaseSubmission(tabId);
     await chrome.storage.local.set({retryAfter: 0});
@@ -125,7 +126,7 @@ chrome.action.onClicked.addListener(tab => serial(async () => {
   await chrome.storage.local.set({paused: false, pausedSites: {...settings.pausedSites, [site]: false}, retryAfter: 0});
   await chrome.storage.session.set({[key(tab.id)]: fresh(site, true)});
   await badge(tab.id, '', `正在重新进入${THU.SITES[site].name}`);
-  await chrome.tabs.update(tab.id, {url: THU.SITES[site].home, active: true});
+  await chrome.tabs.update(tab.id, {url: THU.restartURL(tabURL, site, context?.applicationText), active: true});
 }).catch(() => {}));
 chrome.tabs.onRemoved.addListener(id => { void serial(async () => {
   await chrome.storage.session.remove(key(id));

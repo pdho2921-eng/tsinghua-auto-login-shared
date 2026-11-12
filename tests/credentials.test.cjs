@@ -158,3 +158,14 @@ test('settings cannot request arbitrary roles or use a get operation', async () 
     {op: 'vault-save', role: 'mail', username: 'u', password: ''}]) assert.equal((await h.manage(msg)).ok, false);
   assert.equal(h.calls.length, 0);
 });
+
+test('WEBVPN may follow portal submission, but each application is read and submitted at most once', async () => {
+  const h = harness(); h.state.site='info'; h.snapshot.site='info';
+  h.snapshot.applicationText='您即将登录 WEBVPN'; h.state.steps.submit=true;
+  assert.equal((await h.read()).ok,true);
+  Object.assign(h.snapshot,{username:'fixture-user',passwordReady:true});
+  assert.equal(await h.ready(),true);
+  h.state.steps['submit-webvpn']=true;
+  assert.equal((await h.read()).ok,false);
+  assert.equal(await h.ready(),false);
+});

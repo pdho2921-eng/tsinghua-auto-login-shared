@@ -30,6 +30,10 @@
 
 邮箱过期恢复同时处理应用内的双层弹窗及服务器返回的 `.sysMessage` 页面。后者必须包含明确的会话过期提示与指向本邮箱 `/coremail/` 的 POST 表单，才返回邮箱首页；普通错误、邮件正文和其他表单均不触发。
 
+0.1.4 将统一认证应用 `WEBVPN` 映射到 `info`，共用清华凭据、自动开关和退出暂停。新增 `webvpn.tsinghua.edu.cn` 的精确主机权限；网页脚本只处理根入口、`/login` 和实测的门户代理前缀，其他代理网站立即退出。代理前缀是学校对门户主机名的固定编码，不含账号或会话数据。网页结构或编码变化后需重新核对。
+
+门户认证和 WEBVPN 认证分别使用 `submit`、`submit-webvpn` 单次标记，使同一标签页能依次完成两个应用的认证，但同一应用不会重复提交。两步仍共用提交互斥、冷却和停止条件；取用及就绪检查依据实际认证应用选择标记，并在异步检查后复查应用未改变。WEBVPN 资源站点或代理门户确认成功后释放占用与冷却。工具栏重登保留校外入口。
+
 ## 凭据通信
 
 协议版本为整数 `1`，JSON 前加 4 字节小端长度。每个进程只处理一个请求；请求最大 64 KiB。生产入口只接受 `native/config.json` 对应的精确扩展来源。
@@ -77,6 +81,7 @@ python3 -m unittest discover -s tests -p native_test.py -v
 build/host --test-keychain
 node tests/browser.cjs
 node tests/slow-login.browser.cjs
+node tests/webvpn.browser.cjs
 git diff --check
 ```
 
@@ -94,3 +99,5 @@ git diff --check
 - [Apple 钥匙串应用访问规则](https://developer.apple.com/documentation/security/secaccesscreate(_:_:_:))
 
 前期已比较免费 THU Auto Login、Learn Helper、浏览器保存密码及 Bitwarden。现有资料未能确认其完整覆盖三个站点的失效重登；用户最终选择复用当前站点规则，新增精简系统助手。项目自身代码的公开许可证尚未决定；第三方图标的原有来源与许可文件随资源保留。
+
+WEBVPN 流程参考：[学校双因素认证操作指南](https://its.tsinghua.edu.cn/1wzcycejdh_content.jsp?urltype=news.NewsContentUrl&wbnewsid=4000&wbtreeid=1771)。已有免费 THU Info 提供独立校园客户端，但不能直接完成当前浏览器原标签页的重登需求，因此本轮扩展既有规则，不新增软件或费用。

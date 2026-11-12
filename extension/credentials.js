@@ -42,11 +42,11 @@
   async function readyForSubmit(chrome, sender, state, expectedUsername) {
     if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) ||
       !sender.documentId || (sender.documentLifecycle && sender.documentLifecycle !== 'active') ||
-      state?.status !== 'running' || state.expires <= Date.now() || state.steps.submit || !expectedUsername ||
+      state?.status !== 'running' || state.expires <= Date.now() || !expectedUsername ||
       !['form', 'mail-login'].includes(THU.kind(sender.url))) return false;
     try {
       const before = await inspect(chrome, sender, state, expectedUsername);
-      if (!before || before.userEdited || THU.submission(before) !== 'submit') return false;
+      if (!before || state.steps[THU.submitAction(before)] || before.userEdited || THU.submission(before) !== 'submit') return false;
       // Read-only page-world probe: handlers are not visible in the content script's isolated world.
       // It returns one boolean and never reads a username, password, request body, or stored credential.
       const results = await chrome.scripting.executeScript({
@@ -74,17 +74,17 @@
       });
       if (results.length !== 1 || results[0].frameId !== 0 || results[0].documentId !== sender.documentId || results[0].result !== true) return false;
       const after = await inspect(chrome, sender, state, expectedUsername);
-      return !!after && !after.userEdited && THU.submission(after) === 'submit';
+      return !!after && !after.userEdited && THU.submitAction(after) === THU.submitAction(before) && THU.submission(after) === 'submit';
     } catch { return false; }
   }
   async function readForPage(chrome, sender, state, expectedUsername, role = state?.site === 'mails' ? 'mail' : 'identity') {
     if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) ||
       !sender.documentId || (sender.documentLifecycle && sender.documentLifecycle !== 'active') || !expectedUsername ||
-      state?.status !== 'running' || state.expires <= Date.now() || state.steps.submit ||
+      state?.status !== 'running' || state.expires <= Date.now() ||
       !['form', 'mail-login'].includes(THU.kind(sender.url)) || !roles.has(role) || (state.site !== 'mails' && role !== 'identity')) return failure('denied');
     try {
       const before = await inspect(chrome, sender, state, expectedUsername);
-      if (!before) return failure('denied');
+      if (!before || state.steps[THU.submitAction(before)]) return failure('denied');
       if (THU.filling(before) === 'manual-input') return failure('manual-input');
       if (THU.filling(before) !== 'waiting-for-fill') return failure('denied');
       const result = await THUNative.call(chrome, {op: 'get', role});
@@ -93,13 +93,13 @@
         !sameAccount(result.username, expectedUsername, state.site)) return failure('wrong-account');
       const after = await inspect(chrome, sender, state, expectedUsername);
       const latest = (await chrome.storage.session.get(`tab:${sender.tab.id}`))[`tab:${sender.tab.id}`];
-      if (!latest || latest.status !== 'running' || latest.expires !== state.expires || latest.steps.submit) return failure('changed-page');
+      if (!latest || latest.status !== 'running' || latest.expires !== state.expires || latest.steps[THU.submitAction(before)]) return failure('changed-page');
       const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: true, siteAutomatic: {}});
       const currentCredential = THU.credentialFor(state.site, settings);
       if ((!state.manual && !THU.automaticAllowed(state.site, settings)) || currentCredential.role !== role ||
         !sameAccount(currentCredential.username, expectedUsername, state.site)) return failure('changed-page');
       if (after && THU.filling(after) === 'manual-input') return failure('manual-input');
-      if (state.expires <= Date.now() || !after || THU.filling(after) !== 'waiting-for-fill') return failure('changed-page');
+      if (state.expires <= Date.now() || !after || THU.submitAction(after) !== THU.submitAction(before) || THU.filling(after) !== 'waiting-for-fill') return failure('changed-page');
       // Returned only to the initiating extension content script, never to a page message channel.
       return {ok: true, username: result.username, password: result.password};
     } catch { return failure('changed-page'); }

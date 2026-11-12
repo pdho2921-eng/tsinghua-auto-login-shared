@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "清华网站自动重登 · 共享试用版",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -32,6 +32,7 @@
         "https://learn.tsinghua.edu.cn/*",
         "https://id.tsinghua.edu.cn/do/off/ui/auth/login/*",
         "https://info.tsinghua.edu.cn/*",
+        "https://webvpn.tsinghua.edu.cn/*",
         "https://mails.tsinghua.edu.cn/*"
       ],
       "js": [
@@ -50,6 +51,7 @@
     "https://learn.tsinghua.edu.cn/*",
     "https://id.tsinghua.edu.cn/do/off/ui/auth/login/*",
     "https://info.tsinghua.edu.cn/*",
+    "https://webvpn.tsinghua.edu.cn/*",
     "https://mails.tsinghua.edu.cn/*"
   ]
 }

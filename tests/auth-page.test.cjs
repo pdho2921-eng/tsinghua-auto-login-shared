@@ -8,7 +8,8 @@ const policy = require('../extension/policy.js');
 
 // Observed: <form id="theform" method="post" action="/do/off/ui/auth/login/check">
 // <a class="btn btn-lg btn-primary btn-block" type="button" onclick="doLogin(); return false;">登录</a>
-for (const editingDuringClaim of [false, true]) test(editingDuringClaim ? 'manual editing while awaiting a submit claim cancels submission' : 'real auth form with an anchor submit control is submitted once after filling', async () => {
+for (const application of ['网络学堂2018', '清华大学信息门户', 'WEBVPN'])
+for (const editingDuringClaim of [false, true]) test(`${application}: ` + (editingDuringClaim ? 'manual editing while awaiting a submit claim cancels submission' : 'real auth form with an anchor submit control is submitted once after filling'), async () => {
   const messages = [], clicks = [], listeners = new Map(); let interval, resolveClaim;
   const visible = {dispatchEvent() {}, getClientRects() { return [{}]; }};
   const username = {...visible, type: 'text', value: 'fixture-user', name: 'username'};
@@ -19,7 +20,7 @@ for (const editingDuringClaim of [false, true]) test(editingDuringClaim ? 'manua
     return selector.split(',').includes('a[type=button]') || selector.split(',').includes('a') ? [login] : [];
   }};
   password.form = form;
-  const document = {visibilityState: 'visible', body: {innerText: '您即将登录\n网络学堂2018\n用户名\n密码\n登录', append() {}},
+  const document = {visibilityState: 'visible', body: {innerText: `您即将登录\n${application}\n用户名\n密码\n登录`, append() {}},
     querySelectorAll(selector) { if (selector === 'input[type=password]') return [password]; if (selector === 'input,iframe') return [username, password]; return []; },
     getElementById() { return null; }, createElement: element, addEventListener(type, handler) {listeners.set(type, handler);}};
   const window = {}; window.top = window;

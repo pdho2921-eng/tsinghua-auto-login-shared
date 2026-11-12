@@ -6,6 +6,9 @@
     mails: {name: '学生邮箱', home: 'https://mails.tsinghua.edu.cn/'}
   });
   const HOME = SITES.learn.home;
+  const WEBVPN = 'https://webvpn.tsinghua.edu.cn/';
+  // Observed gateway encoding of info.tsinghua.edu.cn, not a user/session identifier.
+  const VPN_INFO_PREFIX = '/https/77726476706e69737468656265737421f9f9479369247b59700f81b9991b2631506205de';
   function trustedURL(value) {
     try { const u = new URL(value); return u.protocol === 'https:' && !u.port && !u.username && !u.password ? u : null; }
     catch { return null; }
@@ -16,9 +19,12 @@
       if (/^\/f\/wlxt\//.test(u.pathname)) return 'learn';
       if (['/', '/f/login', '/f/redirectByStuOrTeacher'].includes(u.pathname)) return 'entry';
     }
-    if (u.hostname === 'info.tsinghua.edu.cn') {
-      if (u.pathname === '/' || /^\/f\/info(?:\/|_mobile\/)/.test(u.pathname)) return 'info';
-      if (u.pathname === '/f/redirectLoginUrl') return 'info-redirect';
+    if (u.hostname === 'webvpn.tsinghua.edu.cn' && ['/', '/login'].includes(u.pathname)) return 'webvpn';
+    const portalPath = u.hostname === 'info.tsinghua.edu.cn' ? u.pathname :
+      u.hostname === 'webvpn.tsinghua.edu.cn' && u.pathname.startsWith(VPN_INFO_PREFIX + '/') ? u.pathname.slice(VPN_INFO_PREFIX.length) : null;
+    if (portalPath) {
+      if (portalPath === '/' || /^\/f\/info(?:\/|_mobile\/)/.test(portalPath)) return 'info';
+      if (portalPath === '/f/redirectLoginUrl') return 'info-redirect';
     }
     if (u.hostname === 'mails.tsinghua.edu.cn') {
       if (['/', '/coremail/', '/coremail/index.jsp'].includes(u.pathname)) return 'mail-login';
@@ -31,13 +37,24 @@
     }
     return 'other';
   }
+  function authApplication(text = '') {
+    return text.replace(/[\uE000-\uF8FF]/g, '').match(/您即将登录\s*[:：]?\s*(网络学堂2018|清华大学信息门户|WEBVPN)(?=\s|$|[.。…])/)?.[1] || null;
+  }
   function authSite(text = '') {
-    const match = text.replace(/[\uE000-\uF8FF]/g, '').match(/您即将登录\s*[:：]?\s*(网络学堂2018|清华大学信息门户)(?=\s|$|[.。…])/);
-    return match ? (match[1] === '网络学堂2018' ? 'learn' : 'info') : null;
+    const application = authApplication(text);
+    return application ? (application === '网络学堂2018' ? 'learn' : 'info') : null;
+  }
+  const submitAction = snapshot => authApplication(snapshot.applicationText) === 'WEBVPN' ? 'submit-webvpn' : 'submit';
+  const infoLoginURL = value => trustedURL(value)?.hostname === 'webvpn.tsinghua.edu.cn' && kind(value) === 'info'
+    ? WEBVPN.slice(0, -1) + VPN_INFO_PREFIX + '/f/redirectLoginUrl?type=u' : SITES.info.login;
+  function restartURL(value, site, applicationText = '') {
+    if (site === 'info' && ((trustedURL(value)?.hostname === 'webvpn.tsinghua.edu.cn' && kind(value) !== 'other') || authApplication(applicationText) === 'WEBVPN')) return WEBVPN;
+    return SITES[site]?.home;
   }
   function siteFor(value, text = '') {
     const u = trustedURL(value); if (!u) return null;
     const site = {'learn.tsinghua.edu.cn': 'learn', 'info.tsinghua.edu.cn': 'info', 'mails.tsinghua.edu.cn': 'mails'}[u.hostname];
+    if (u.hostname === 'webvpn.tsinghua.edu.cn' && kind(value) !== 'other') return 'info';
     return site || (['form', 'auth-result'].includes(kind(value)) ? authSite(text) : null);
   }
   const isLearnApplication = text => authSite(text) === 'learn';
@@ -79,14 +96,14 @@
   }
   function actionAllowed(page, action) {
     return ({'expired-link': ['learn'], 'entry-login': ['entry'], 'info-login': ['info'],
-      'mail-confirm': ['mail-app'], 'mail-relogin': ['mail-app'], submit: ['form', 'mail-login']})[action]?.includes(page) || false;
+      'mail-confirm': ['mail-app'], 'mail-relogin': ['mail-app'], submit: ['form', 'mail-login'], 'submit-webvpn': ['form']})[action]?.includes(page) || false;
   }
   function claim(state, action, now) {
     if (!state || state.status !== 'running' || state.expires <= now) return null;
-    if (!['expired-link', 'entry-login', 'info-login', 'mail-confirm', 'mail-relogin', 'submit'].includes(action) || state.steps[action]) return null;
+    if (!['expired-link', 'entry-login', 'info-login', 'mail-confirm', 'mail-relogin', 'submit', 'submit-webvpn'].includes(action) || state.steps[action]) return null;
     return {...state, steps: {...state.steps, [action]: true}};
   }
-  const api = {HOME, SITES, kind, authSite, siteFor, isLearnApplication, credentialFor, automaticAllowed, submission, filling, expiredLoginTarget, actionAllowed, claim};
+  const api = {HOME, SITES, WEBVPN, kind, authApplication, authSite, submitAction, infoLoginURL, restartURL, siteFor, isLearnApplication, credentialFor, automaticAllowed, submission, filling, expiredLoginTarget, actionAllowed, claim};
   globalThis.THU = api;
   if (typeof module !== 'undefined') module.exports = api;
 })();

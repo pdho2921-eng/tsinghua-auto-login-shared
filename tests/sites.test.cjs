@@ -6,7 +6,7 @@ const THU = require('../extension/policy.js');
 const visible = {dispatchEvent() {}, getClientRects() { return [{}]; }};
 function control(text, click = () => {}) { return {...visible, innerText: text, click}; }
 function dialog(text, buttons) { return {...visible, innerText: text, contains: el => buttons.includes(el), querySelectorAll: () => buttons}; }
-async function run({url, text, dialogs = [], loginControls = [], mailForm = false, password = 'fixture-secret', username = 'fixture-user'} = {}) {
+async function run({url, text, dialogs = [], systemMessages = [], loginControls = [], mailForm = false, password = 'fixture-secret', username = 'fixture-user'} = {}) {
   let interval, currentText = text, submits = 0, time = 0;
   const messages = [], navigations = [], claims = new Set(), notes = new Map();
   const user = {...visible, type: 'text', value: username};
@@ -16,7 +16,7 @@ async function run({url, text, dialogs = [], loginControls = [], mailForm = fals
     querySelector: () => ({value: 'mails.tsinghua.edu.cn'}), querySelectorAll: s => s === 'input' ? [user, pass] : [login]};
   pass.form = form;
   const document = {visibilityState: 'visible', body: {get innerText() {return currentText;}, append(el) {notes.set(el.id,el);}},
-    querySelectorAll(s) { if (s === '.u-dialog,[role=dialog]') return dialogs; if (s === '.onload') return loginControls;
+    querySelectorAll(s) { if (s === '.u-dialog,[role=dialog]') return dialogs; if (s === '.sysMessage') return systemMessages; if (s === '.onload') return loginControls;
       if (s === 'input[type=password]') return mailForm ? [pass] : []; if (s === 'input,iframe') return mailForm ? [user,pass] : []; return []; },
     getElementById: id => notes.get(id), createElement: element, addEventListener() {}};
   const window = {}; window.top = window;
@@ -75,6 +75,20 @@ test('mail uses the observed Coremail form and submits the shared account only o
   await p.tick();assert.equal(p.submits,1);
   assert.equal(p.messages.some(m=>m.site==='mails'&&m.action==='submit'),true);
   assert.equal(JSON.stringify(p.messages).includes('fixture-secret'),false);
+});
+test('mail server-rendered expired-session panel returns to login once, but other system errors do not', async () => {
+  const panel = (message, action = 'https://mails.tsinghua.edu.cn/coremail/') => ({...visible,
+    querySelector: selector => selector === '#ErrorMsg' ? control(message) : {action, method: 'post'}});
+  const p = await run({url: 'https://mails.tsinghua.edu.cn/coremail/XT/index.jsp?sid=fixture-expired',
+    text: '系统信息 会话已过期, 请重新登录 确 定', systemMessages: [panel('会话已过期, 请重新登录')]});
+  await p.tick();
+  assert.deepEqual(p.navigations, [THU.SITES.mails.home]);
+  assert.equal(p.messages.some(m => m.op === 'get-credential'), false);
+  for (const item of [panel('其他错误'), panel('会话已过期, 请重新登录', 'https://evil.test/')]) {
+    const ignored = await run({url: 'https://mails.tsinghua.edu.cn/coremail/XT/index.jsp',
+      text: '系统信息 会话已过期, 请重新登录', systemMessages: [item]});
+    assert.deepEqual(ignored.navigations, []);
+  }
 });
 test('mail errors and verification prompts stop without submit', async () => {
   for(const text of ['邮箱账号登录 用户名或密码错误','邮箱账号登录 请输入验证码']) {

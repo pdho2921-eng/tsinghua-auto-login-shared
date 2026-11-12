@@ -5,7 +5,7 @@ const TTL = 120_000;
 const COOLDOWN = 600_000;
 let queue = Promise.resolve();
 const serial = fn => { const result = queue.then(fn); queue = result.catch(() => {}); return result; };
-const fresh = (site = 'learn') => ({site, status: 'running', expires: Date.now() + TTL, steps: {}});
+const fresh = (site = 'learn', manual = false) => ({site, manual, status: 'running', expires: Date.now() + TTL, steps: {}});
 const key = id => `tab:${id}`;
 async function badge(tabId, text, title) {
   await chrome.action.setBadgeText({tabId, text});
@@ -17,7 +17,7 @@ async function handle(message, sender) {
   if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !sender.tab || THU.kind(sender.url) === 'other') return null;
   if (message.op === 'open-settings') { await chrome.runtime.openOptionsPage(); return true; }
   const tabId = sender.tab.id, storageKey = key(tabId);
-  const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: false, paused: false, pausedSites: {}, retryAfter: 0});
+  const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: false, siteAutomatic: {}, paused: false, pausedSites: {}, retryAfter: 0});
   const stored = await chrome.storage.session.get(storageKey);
   let state = stored[storageKey];
   const page = THU.kind(sender.url);
@@ -28,8 +28,9 @@ async function handle(message, sender) {
     state = null;
   }
   if (message.op === 'get-credential') {
-    const expected = state?.site === 'mails' ? settings.mailUsername : settings.username;
-    return THUCredentials.readForPage(chrome, sender, state, expected);
+    if (!state?.manual && !THU.automaticAllowed(state?.site, settings)) return {ok: false, error: 'denied'};
+    const credential = THU.credentialFor(state?.site, settings);
+    return THUCredentials.readForPage(chrome, sender, state, credential.username, credential.role);
   }
   if (message.op === 'pause') {
     if (!site) return null;
@@ -39,7 +40,11 @@ async function handle(message, sender) {
     return null;
   }
   if (message.op === 'begin') {
-    if (!(site === 'mails' ? settings.mailUsername : settings.username)) return {status: 'unconfigured'};
+    if (!(state?.manual && state.status === 'running') && !THU.automaticAllowed(site, settings)) return null;
+    if (!THU.credentialFor(site, settings).username) {
+      await badge(tabId, '!', THUNative.errors['not-found']);
+      return {status: 'unconfigured'};
+    }
     if (!state || state.status === 'done' || (['blocked', 'timeout'].includes(state.status) && state.expires <= Date.now() && settings.retryAfter <= Date.now())) {
       const eligible = !!site && (['learn', 'entry', 'info', 'mail-login', 'mail-app'].includes(page) || page === 'form');
       if (!eligible || !settings.automatic || settings.pausedSites[site] || (site === 'learn' && settings.paused) || settings.retryAfter > Date.now()) return null;
@@ -51,10 +56,11 @@ async function handle(message, sender) {
       await chrome.storage.session.set({[storageKey]: state});
       await badge(tabId, '!', '登录超时；点击扩展按钮可手动重试');
     }
-    return {...state, expectedUsername: state.site === 'mails' ? settings.mailUsername : settings.username};
+    return {...state, expectedUsername: THU.credentialFor(state.site, settings).username};
   }
   if (message.op === 'claim') {
     if (!site || !state || (state.site || 'learn') !== site || !THU.actionAllowed(page, message.action)) return false;
+    if (!state.manual && !THU.automaticAllowed(site, settings)) return false;
     const next = THU.claim(state, message.action, Date.now());
     if (!next) return false;
     // Commit before clicking. Survives navigation, service-worker sleep, and concurrent messages.
@@ -87,21 +93,26 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   return true;
 });
 chrome.action.onClicked.addListener(tab => serial(async () => {
-  const settings = await chrome.storage.local.get({username: '', mailUsername: '', pausedSites: {}});
-  if (!settings.username && !settings.mailUsername) return chrome.runtime.openOptionsPage();
   if (!Number.isInteger(tab?.id) || tab.id < 0) return;
+  let tabURL = tab.url;
+  if (!tabURL) {
+    try { tabURL = (await chrome.tabs.get(tab.id)).url; } catch { /* A closing tab has no restart target. */ }
+  }
+  // Clicking on our settings/preview pages is a no-op, including when the click event omits the URL.
+  if (tabURL?.startsWith(`chrome-extension://${chrome.runtime.id}/`)) return;
   let context;
   try { context = await chrome.tabs.sendMessage(tab.id, {op: 'site-context'}, {frameId: 0}); } catch { /* Page may predate extension reload. */ }
-  let site = (Object.hasOwn(THU.SITES, context?.site || '') && context.site) || THU.siteFor(tab.url);
-  if (!site && ['form', 'auth-result', 'redirect'].includes(THU.kind(tab.url))) {
+  let site = (Object.hasOwn(THU.SITES, context?.site || '') && context.site) || THU.siteFor(tabURL);
+  if (!site && ['form', 'auth-result', 'redirect'].includes(THU.kind(tabURL))) {
     const saved = (await chrome.storage.session.get(key(tab.id)))[key(tab.id)];
     if (Object.hasOwn(THU.SITES, saved?.site || '')) site = saved.site;
     else { await badge(tab.id, '', '认证页面仍在加载；请稍后再次点击'); return; }
   }
-  site ||= 'learn';
-  if (!(site === 'mails' ? settings.mailUsername : settings.username)) return chrome.runtime.openOptionsPage();
+  if (!site) return;
+  const settings = await chrome.storage.local.get({username: '', mailUsername: '', pausedSites: {}});
+  if (!THU.credentialFor(site, settings).username) return chrome.runtime.openOptionsPage();
   await chrome.storage.local.set({paused: false, pausedSites: {...settings.pausedSites, [site]: false}, retryAfter: 0});
-  await chrome.storage.session.set({[key(tab.id)]: fresh(site)});
+  await chrome.storage.session.set({[key(tab.id)]: fresh(site, true)});
   await badge(tab.id, '', `正在重新进入${THU.SITES[site].name}`);
   await chrome.tabs.update(tab.id, {url: THU.SITES[site].home, active: true});
 }).catch(() => {}));

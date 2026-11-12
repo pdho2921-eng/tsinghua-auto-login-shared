@@ -56,7 +56,7 @@ async function check() {
         const account = accounts[role];
         configured[role] = !!account?.configured;
         if (!$(`${role}-username`).value) $(`${role}-username`).value = account?.username || '';
-        $(`${role}-state`).textContent = account?.configured ? '已保存' : '未保存';
+        $(`${role}-state`).textContent = account?.configured ? '已保存' : (role === 'mail' && accounts.identity?.configured ? '使用清华账号' : '未保存');
         $(`${role}-delete`).disabled = !account?.configured;
       }
       await chrome.storage.local.set({username: accounts.identity?.username || '', mailUsername: accounts.mail?.username || ''});
@@ -89,7 +89,10 @@ for (const role of roles) {
     }
   });
   $(`${role}-delete`).addEventListener('click', async () => {
-    if (!confirm('删除本机保存的此账号密码？对应网站将停止自动登录。')) return;
+    const confirmation = role === 'mail'
+      ? '删除单独保存的邮箱账号密码？邮箱将改用清华账号。'
+      : '删除本机保存的清华账号密码？使用此凭据的网站将停止自动登录。';
+    if (!confirm(confirmation)) return;
     $(`${role}-delete`).disabled = true;
     $(`${role}-delete`).setAttribute('aria-busy', 'true');
     const result = await send({op: 'vault-delete', role});
@@ -106,6 +109,27 @@ $('automatic').addEventListener('change', async () => {
   await chrome.storage.session.clear();
   $('mode-result').textContent = automatic ? '已开启。请刷新需要登录的网页。' : '已关闭自动模式。可点击工具栏图标手动执行登录，右键图标选择‘选项’可返回本界面修改设置';
 });
-void chrome.storage.local.get({automatic: true}).then(settings => { $('automatic').checked = settings.automatic; });
+let siteSettingsQueue = Promise.resolve();
+for (const site of Object.keys(THU.SITES)) {
+  $(`auto-${site}`).addEventListener('change', () => {
+    const enabled = $(`auto-${site}`).checked;
+    siteSettingsQueue = siteSettingsQueue.then(async () => {
+      const settings = await chrome.storage.local.get({siteAutomatic: {}});
+      await chrome.storage.local.set({siteAutomatic: {...settings.siteAutomatic, [site]: enabled}});
+      // Cancel only this site's attempts; a different site's login can continue.
+      const states = await chrome.storage.session.get(null);
+      const keys = Object.keys(states).filter(key => key.startsWith('tab:') && states[key]?.site === site);
+      if (keys.includes(`tab:${states.submitting?.tabId}`)) keys.push('submitting');
+      if (keys.length) await chrome.storage.session.remove(keys);
+      $('site-mode-result').textContent = enabled
+        ? `已开启${THU.SITES[site].name}的自动登录。请刷新对应网页。`
+        : `已关闭${THU.SITES[site].name}的自动登录。仍可点击工具栏图标手动执行登录。`;
+    }).catch(() => { $('site-mode-result').textContent = '设置未能保存，请刷新本页后重试。'; });
+  });
+}
+void chrome.storage.local.get({automatic: true, siteAutomatic: {}}).then(settings => {
+  $('automatic').checked = settings.automatic;
+  for (const site of Object.keys(THU.SITES)) $(`auto-${site}`).checked = settings.siteAutomatic[site] !== false;
+});
 void check();
 syncFieldTools();

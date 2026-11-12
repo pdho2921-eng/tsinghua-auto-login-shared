@@ -4,7 +4,7 @@ const fs = require('node:fs'), vm = require('node:vm'), path = require('node:pat
 const THU = require('../extension/policy.js');
 const FORM = 'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/fixture/0';
 function harness() {
-  const calls = [], writes = [], local = {};
+  const calls = [], writes = [], local = {username: 'fixture-user', mailUsername: 'fixture-user', automatic: true};
   const state = {site: 'learn', status: 'running', expires: Date.now()+120000, steps: {}};
   const session = {'tab:5': state};
   const sender = {id: 'fixture-extension', url: FORM, tab: {id: 5}, frameId: 0, documentId: 'document-1', documentLifecycle: 'active'};
@@ -20,15 +20,15 @@ function harness() {
       return [{frameId: 0, documentId: 'document-1', result: structuredClone(snapshot)}];
     }}, storage: {
       session: {get: async k => ({[k]: session[k]}), clear: async () => {for (const k of Object.keys(session)) delete session[k];}},
-      local: {set: async data => {writes.push(structuredClone(data)); Object.assign(local, data);}}
+      local: {get: async defaults => ({...defaults, ...local}), set: async data => {writes.push(structuredClone(data)); Object.assign(local, data);}}
     }};
   const ctx = vm.createContext({THU, Date, Set, Object, String, chrome, THUNative: {call: async (_c, request) => {
     calls.push(structuredClone(request)); await during?.(); return structuredClone(result);
   }}});
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../extension/credentials.js'), 'utf8'), ctx);
-  return {sender, state, snapshot, calls, writes, session, chrome,
+  return {sender, state, snapshot, calls, writes, session, local, chrome,
     setResult(r) {result = r;}, during(fn) {during = fn;}, setTab(t) {tab = t;},
-    read: () => ctx.THUCredentials.readForPage(chrome, sender, state, 'fixture-user'),
+    read: role => ctx.THUCredentials.readForPage(chrome, sender, state, 'fixture-user', role),
     manage: (message, s = {id: sender.id, url: chrome.runtime.getURL('options.html')}) => ctx.THUCredentials.manage(chrome, message, s)};
 }
 test('one exact top-level login document receives only its own credential', async () => {
@@ -80,6 +80,20 @@ test('mail gets the separate mail slot and checks its own form', async () => {
   Object.assign(h.snapshot, {url: h.sender.url, site: 'mails', action: 'https://mails.tsinghua.edu.cn/coremail/index.jsp?cus=1',
     applicationText: '', mailForm: true, mailDomain: 'mails.tsinghua.edu.cn'});
   assert.equal((await h.read()).ok, true); assert.equal(h.calls[0].role, 'mail');
+});
+test('mail can use identity credentials when explicitly resolved as the fallback source', async () => {
+  const h = harness(); h.state.site = 'mails'; h.sender.url = THU.SITES.mails.home; h.setTab({url: h.sender.url});
+  h.local.mailUsername = '';
+  Object.assign(h.snapshot, {url: h.sender.url, site: 'mails', action: 'https://mails.tsinghua.edu.cn/coremail/index.jsp?cus=1',
+    applicationText: '', mailForm: true, mailDomain: 'mails.tsinghua.edu.cn'});
+  assert.equal((await h.read('identity')).ok, true);
+  assert.deepEqual(h.calls, [{op: 'get', role: 'identity'}]);
+});
+test('disabling a site or changing its credential source during native retrieval cancels the reply', async () => {
+  for (const change of [h => {h.local.siteAutomatic = {learn: false};}, h => {h.local.username = 'changed-user';}]) {
+    const h = harness(); h.during(() => change(h));
+    assert.equal((await h.read()).password, undefined);
+  }
 });
 test('keychain errors are surfaced and unexpected native usernames never escape', async () => {
   const h = harness(); h.setResult({ok: false, error: 'keychain-locked'});

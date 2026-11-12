@@ -70,6 +70,12 @@
     el.dispatchEvent(new Event('change', {bubbles: true}));
   }
   function mailExpiredControls() {
+    // Reloading an expired URL can return Coremail's standalone server error panel.
+    const reenter = [...document.querySelectorAll('.sysMessage')].filter(visible).some(el => {
+      const error = el.querySelector('#ErrorMsg'), form = el.querySelector('form');
+      return visible(error) && /^会话已过期[,，]?请重新登录$/.test(label(error)) &&
+        form?.action === 'https://mails.tsinghua.edu.cn/coremail/' && form.method.toLowerCase() === 'post';
+    });
     // Coremail uses u-dialog. Scope confirmation to the observed error, never ordinary mail dialogs.
     const dialogs = [...document.querySelectorAll('.u-dialog,[role=dialog]')].filter(visible);
     const specific = dialogs.filter(el => {
@@ -79,7 +85,7 @@
     const controls = specific.flatMap(el => [...el.querySelectorAll('button,[role=button]')].filter(visible));
     const confirms = [...new Set(controls.filter(el => label(el) === '确定' && specific.some(d => d.contains(el) && label(d).includes('初始化用户信息失败'))))];
     const relogins = [...new Set(controls.filter(el => label(el) === '重新登录'))];
-    return {expired: specific.length > 0, confirm: confirms.length === 1 ? confirms[0] : null, relogin: relogins.length === 1 ? relogins[0] : null};
+    return {expired: reenter || specific.length > 0, reenter, confirm: confirms.length === 1 ? confirms[0] : null, relogin: relogins.length === 1 ? relogins[0] : null};
   }
   async function tick() {
     if (retired) return;
@@ -119,6 +125,7 @@
       const state = await send({op: 'begin'});
       if (!state || state.status !== 'running') {
         if (state?.status === 'timeout') await stop(THUNotice.messages['login-timeout']);
+        if (state?.status === 'unconfigured') await stop(THUNative.errors['not-found']);
         finished = true; clearInterval(timer);
         return;
       }
@@ -140,7 +147,8 @@
         return;
       }
       if (type === 'mail-app') {
-        if (mail.confirm && await send({op: 'claim', action: 'mail-confirm'})) mail.confirm.click();
+        if (mail.reenter && await send({op: 'claim', action: 'mail-relogin'})) location.assign(THU.SITES.mails.home);
+        else if (mail.confirm && await send({op: 'claim', action: 'mail-confirm'})) mail.confirm.click();
         else if (!mail.confirm && mail.relogin && await send({op: 'claim', action: 'mail-relogin'})) mail.relogin.click();
         return;
       }

@@ -42,6 +42,11 @@
   }
   const isLearnApplication = text => authSite(text) === 'learn';
   const mailAccount = value => String(value || '').trim().replace(/@mails\.tsinghua\.edu\.cn$/i, '');
+  function credentialFor(site, settings = {}) {
+    const role = site === 'mails' && settings.mailUsername ? 'mail' : 'identity';
+    return {role, username: Object.hasOwn(SITES, site || '') ? (role === 'mail' ? settings.mailUsername : settings.username) || '' : ''};
+  }
+  const automaticAllowed = (site, settings = {}) => !!settings.automatic && Object.hasOwn(SITES, site || '') && settings.siteAutomatic?.[site] !== false;
   function submission(s) {
     const page = kind(s.url), site = siteFor(s.url, s.applicationText);
     if (!['form', 'mail-login'].includes(page)) return 'wrong-page';
@@ -81,7 +86,7 @@
     if (!['expired-link', 'entry-login', 'info-login', 'mail-confirm', 'mail-relogin', 'submit'].includes(action) || state.steps[action]) return null;
     return {...state, steps: {...state.steps, [action]: true}};
   }
-  const api = {HOME, SITES, kind, authSite, siteFor, isLearnApplication, submission, filling, expiredLoginTarget, actionAllowed, claim};
+  const api = {HOME, SITES, kind, authSite, siteFor, isLearnApplication, credentialFor, automaticAllowed, submission, filling, expiredLoginTarget, actionAllowed, claim};
   globalThis.THU = api;
   if (typeof module !== 'undefined') module.exports = api;
 })();

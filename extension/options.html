@@ -47,7 +47,8 @@
       <p id="identity-result" class="feedback" role="status" aria-live="polite"></p>
     </form>
     <form id="mail-form" class="credential-form" autocomplete="off">
-      <h3>学生邮箱 <span class="optional">（可选）</span> <span id="mail-state" class="optional">未保存</span></h3>
+      <h3>学生邮箱 <span id="mail-state" class="optional">未保存</span></h3>
+      <p class="mail-credential-hint">未单独保存邮箱账号密码时，使用清华账号和密码。</p>
       <div class="fields"><div class="field"><div class="field-label"><label for="mail-username">邮箱账号</label><button class="icon-button copy-button" type="button" data-copy-from="identity-username" data-copy-to="mail-username" title="从清华账号复制用户名" aria-label="从清华账号复制用户名" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span>从清华账号复制</span></button></div>
         <input id="mail-username" type="text" required maxlength="160" spellcheck="false" autocomplete="off" placeholder="用户名或完整学生邮箱地址"></div>
         <div class="field"><div class="field-label"><label for="mail-password">邮箱密码</label><button class="icon-button copy-button" type="button" data-copy-from="identity-password" data-copy-to="mail-password" title="从清华账号复制密码" aria-label="从清华账号复制密码" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span>从清华账号复制</span></button></div>
@@ -62,6 +63,12 @@
     <label class="toggle-row" for="automatic"><span class="toggle-copy"><strong>自动处理登录失效</strong>
       <span>关闭后，可点击工具栏图标手动执行登录，右键图标选择‘选项’可返回本界面修改设置</span></span><input id="automatic" type="checkbox" role="switch"></label>
     <p id="mode-result" class="feedback" role="status" aria-live="polite"></p>
+    <fieldset class="site-toggles"><legend>各网站自动登录</legend>
+      <label class="site-toggle" for="auto-learn"><span>网络学堂</span><input id="auto-learn" type="checkbox" role="switch" checked></label>
+      <label class="site-toggle" for="auto-info"><span>信息门户</span><input id="auto-info" type="checkbox" role="switch" checked></label>
+      <label class="site-toggle" for="auto-mails"><span>学生邮箱</span><input id="auto-mails" type="checkbox" role="switch" checked></label>
+    </fieldset>
+    <p id="site-mode-result" class="feedback" role="status" aria-live="polite"></p>
     <div class="actions site-links"><a class="button secondary" href="https://learn.tsinghua.edu.cn/f/wlxt/index/course/student/" target="_blank" rel="noreferrer">打开网络学堂</a>
       <a class="button secondary" href="https://info.tsinghua.edu.cn/f/info/gxfw_fg/common/index" target="_blank" rel="noreferrer">打开信息门户</a>
       <a class="button secondary" href="https://mails.tsinghua.edu.cn/" target="_blank" rel="noreferrer">打开学生邮箱</a></div>
@@ -75,6 +82,6 @@
   </section>
   <footer class="page-footer"><span class="version">扩展版本 0.1.1</span></footer>
 </main>
-<script src="native.js"></script><script src="options.js"></script>
+<script src="policy.js"></script><script src="native.js"></script><script src="options.js"></script>
 </body>
 </html>

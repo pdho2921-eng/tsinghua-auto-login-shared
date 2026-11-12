@@ -61,7 +61,7 @@ function storage(seed = {}) {
     async remove(key) { delete values[key]; }
   };
 }
-function background(local = storage({username: 'test-user', mailUsername: 'test-user', automatic: true}), session = storage(), tabContext = null) {
+function background(local = storage({username: 'test-user', mailUsername: 'test-user', automatic: true}), session = storage(), tabContext = null, tabURL = null) {
   const event = {addListener() {}};
   let click;
   const navigations = [], created = [];
@@ -69,15 +69,53 @@ function background(local = storage({username: 'test-user', mailUsername: 'test-
     chrome: {storage: {local, session}, runtime: {id: 'test-extension', onMessage: event, onInstalled: event, async openOptionsPage() {}},
       alarms: {onAlarm: event},
       action: {onClicked: {addListener(fn) { click = fn; }}, async setBadgeText() {}, async setTitle() {}},
-      tabs: {onRemoved: event, async sendMessage() { return tabContext; }, async create(data) { created.push(data); return {id: 99}; },
+      tabs: {onRemoved: event, async get(id) {return {id, url: tabURL};}, async sendMessage() { return tabContext; }, async create(data) { created.push(data); return {id: 99}; },
         async update(id, data) { navigations.push({id, ...data}); }}}});
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../extension/background.js'), 'utf8'), context);
   return {context, local, session, navigations, created, click: tab => click(tab), handle: (op, sender) => context.handle(op, sender)};
 }
 const sender = (tab = 1, url = policy.HOME) => ({id: 'test-extension', frameId: 0, tab: {id: tab}, url});
+test('clicking the toolbar on the extension settings page leaves the page and login state unchanged', async () => {
+  for (const url of ['chrome-extension://test-extension/options.html', undefined]) {
+    const worker = background(undefined, undefined, null, 'chrome-extension://test-extension/options.html');
+    await worker.click({id: 7, url});
+    assert.deepEqual(worker.navigations, []);
+    assert.deepEqual(worker.session.values, {});
+  }
+});
+test('mail inherits the identity account only when no separate mail account is configured', async () => {
+  for (const mailUsername of ['', 'mail-user']) {
+    const worker = background(storage({username: 'identity-user', mailUsername, automatic: true}));
+    const state = await worker.handle({op: 'begin'}, sender(7, policy.SITES.mails.home));
+    assert.equal(state.status, 'running');
+    assert.equal(state.expectedUsername, mailUsername || 'identity-user');
+    await worker.click({id: 7, url: policy.SITES.mails.home});
+    assert.equal(worker.navigations[0]?.url, policy.SITES.mails.home);
+  }
+});
+test('per-site automatic switches leave other sites available and allow an explicit manual restart', async () => {
+  for (const site of Object.keys(policy.SITES)) {
+    const worker = background(storage({username: 'test-user', automatic: true, siteAutomatic: {[site]: false}}));
+    assert.equal(await worker.handle({op: 'begin'}, sender(7, policy.SITES[site].home)), null);
+    const other = site === 'learn' ? 'info' : 'learn';
+    assert.equal((await worker.handle({op: 'begin'}, sender(8, policy.SITES[other].home))).status, 'running');
+    await worker.local.set({automatic: false});
+    assert.equal(await worker.handle({op: 'begin'}, sender(9, policy.SITES[other].home)), null);
+    await worker.click({id: 7, url: policy.SITES[site].home});
+    const state = await worker.handle({op: 'begin'}, sender(7, policy.SITES[site].home));
+    assert.equal(state.status, 'running');
+    assert.equal(state.manual, true);
+  }
+});
+test('turning off a site blocks an in-flight automatic submission claim', async () => {
+  const worker = background();
+  assert.equal((await worker.handle({op: 'begin', site: 'learn'}, sender(7, FORM))).status, 'running');
+  await worker.local.set({siteAutomatic: {learn: false}});
+  assert.equal(await worker.handle({op: 'claim', action: 'submit', site: 'learn'}, sender(7, FORM)), false);
+});
 test('toolbar restart stays in the clicked tab even when Chrome omits its URL', async () => {
   for (const tab of [{id: 7}, {id: 7, url: FORM}, {id: 7, url: policy.HOME}]) {
-    const worker = background(undefined, undefined, tab.url === FORM ? {site: 'learn'} : null);
+    const worker = background(undefined, undefined, !tab.url || tab.url === FORM ? {site: 'learn'} : null);
     await worker.click(tab);
     assert.equal(worker.created.length, 0, 'login must not open another tab');
     assert.equal(worker.navigations[0]?.id, 7);

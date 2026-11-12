@@ -9,12 +9,12 @@ const output = path.join(root, 'build/browser-check');
 fs.mkdirSync(output, {recursive: true});
 const FORM = 'https://id.tsinghua.edu.cn/do/off/ui/auth/login/form/fixture/0';
 let mode = 'learn', prefill = '', submits = 0;
-const fixture = () => `<!doctype html><meta charset="utf-8"><h1>${mode === 'mail' ? '学生邮箱' : '您即将登录 ' + (mode === 'info' ? '清华大学信息门户' : '网络学堂2018')}</h1>
+const fixture = pageURL => mode === 'mail-expired-server' && new URL(pageURL).pathname === '/coremail/XT/index.jsp' ? `<!doctype html><meta charset="utf-8"><div class="sysMessage"><div class="winHead">系统信息</div><p id="ErrorMsg">会话已过期, 请重新登录</p><form action="/coremail/" method="post"><button>确 定</button></form></div>` : mode === 'mail-expired' && new URL(pageURL).pathname === '/coremail/XT/index.jsp' ? `<!doctype html><meta charset="utf-8"><div class="u-dialog">系统信息 会话已过期, 请重新登录 <button onclick="location.assign('/')">重新登录</button></div><div class="u-dialog" id="init-error">系统信息 初始化用户信息失败 <button onclick="document.getElementById('init-error').remove()">确定</button></div>` : `<!doctype html><meta charset="utf-8"><h1>${mode.startsWith('mail') ? '学生邮箱' : '您即将登录 ' + (mode === 'info' ? '清华大学信息门户' : '网络学堂2018')}</h1>
 ${mode === 'challenge' ? '<p>请输入验证码</p>' : ''}
 ${mode === 'server-error' ? '<p>您的用户名或密码不正确，请重试！</p>' : ''}
-<form ${mode === 'mail' ? 'class="j-login-form"' : ''} action="${mode === 'mail' ? 'https://mails.tsinghua.edu.cn/coremail/index.jsp?cus=1' : mode === 'evil' ? 'https://evil.test/' : 'https://id.tsinghua.edu.cn/do/off/ui/auth/login/check'}">
+<form ${mode.startsWith('mail') ? 'class="j-login-form"' : ''} action="${mode.startsWith('mail') ? 'https://mails.tsinghua.edu.cn/coremail/index.jsp?cus=1' : mode === 'evil' ? 'https://evil.test/' : 'https://id.tsinghua.edu.cn/do/off/ui/auth/login/check'}">
 <input type="text" name="username" value="${prefill ? '2099000001' : ''}"><input type="password" name="password" value="${prefill === 'pair' ? 'different-autofill-password' : ''}">
-${mode === 'mail' ? '<input type="hidden" name="domain" value="mails.tsinghua.edu.cn">' : ''}
+${mode.startsWith('mail') ? '<input type="hidden" name="domain" value="mails.tsinghua.edu.cn">' : ''}
 <button type="button" onclick="window.submits=(window.submits||0)+1;document.getElementById('result').textContent='fixture submitted'">登录</button></form><p id="result"></p>`;
 (async () => {
   let context;
@@ -23,7 +23,7 @@ ${mode === 'mail' ? '<input type="hidden" name="domain" value="mails.tsinghua.ed
       args: [`--disable-extensions-except=${path.join(root, 'extension')}`, `--load-extension=${path.join(root, 'extension')}`]});
     await context.route('https://**/*', route => {
       if (['id.tsinghua.edu.cn', 'mails.tsinghua.edu.cn'].includes(new URL(route.request().url()).hostname))
-        return route.fulfill({contentType: 'text/html', body: fixture()});
+        return route.fulfill({contentType: 'text/html', body: fixture(route.request().url())});
       return route.abort();
     });
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
@@ -163,10 +163,46 @@ ${mode === 'mail' ? '<input type="hidden" name="domain" value="mails.tsinghua.ed
     await page.waitForFunction(() => document.getElementById('connection-indicator').textContent === '已连接');
     page.on('dialog', d => d.accept());
     await page.locator('#mail-delete').click();
-    await page.waitForFunction(() => document.getElementById('mail-state').textContent === '未保存');
+    await page.waitForFunction(() => document.getElementById('mail-state').textContent === '使用清华账号');
     assert.equal(await worker.evaluate(() => !!__testVault.mail), false);
     assert.equal(errors.length, 0, errors.join('\n'));
     console.log('PASS: locked-keychain guidance and credential deletion; no page errors');
+    mode = 'mail';
+    await worker.evaluate(async () => {await chrome.storage.session.clear(); await chrome.storage.local.set({retryAfter: 0}); __testRequests.length = 0;});
+    await page.locator('#auto-mails').uncheck();
+    await page.waitForFunction(() => document.getElementById('site-mode-result').textContent.startsWith('已关闭学生邮箱'));
+    await login.goto('https://mails.tsinghua.edu.cn/');
+    await login.waitForTimeout(900);
+    assert.equal(await login.locator('input[type=password]').inputValue(), '');
+    assert.equal(await worker.evaluate(() => __testRequests.filter(r => r.op === 'get').length), 0);
+    mode = 'learn';
+    await login.goto(FORM);
+    await login.waitForFunction(() => window.submits === 1);
+    console.log('PASS: disabled mail never retrieves credentials while Learn still logs in');
+    await page.locator('#auto-mails').check();
+    await page.waitForFunction(() => document.getElementById('site-mode-result').textContent.startsWith('已开启学生邮箱'));
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('mail-state').textContent === '使用清华账号');
+    assert.equal(await page.locator('#auto-mails').isChecked(), true);
+    for (const expiredMode of ['mail-expired', 'mail-expired-server']) {
+      mode = expiredMode;
+      await worker.evaluate(async () => {await chrome.storage.session.clear(); await chrome.storage.local.set({retryAfter: 0}); __testRequests.length = 0;});
+      await login.goto('https://mails.tsinghua.edu.cn/coremail/XT/index.jsp?sid=fixture-expired');
+      await login.waitForURL('https://mails.tsinghua.edu.cn/');
+      await login.waitForFunction(() => window.submits === 1);
+      assert.equal(await login.locator('input[type=text]').inputValue(), 'fixture-user');
+      assert.deepEqual(await worker.evaluate(() => __testRequests.filter(r => r.op === 'get').map(r => r.role)), ['identity']);
+    }
+    console.log('PASS: both expired-mail layouts return to login, inherit the identity pair and submit once');
+    await page.locator('#identity-delete').click();
+    await page.waitForFunction(() => document.getElementById('mail-state').textContent === '未保存');
+    mode = 'mail';
+    await worker.evaluate(async () => {await chrome.storage.session.clear(); await chrome.storage.local.set({retryAfter: 0}); __testRequests.length = 0;});
+    await login.goto('https://mails.tsinghua.edu.cn/');
+    await login.waitForFunction(() => document.getElementById('thu-login-helper-message')?.textContent.includes('尚未保存'));
+    assert.equal(await worker.evaluate(() => __testRequests.filter(r => r.op === 'get').length), 0);
+    console.log('PASS: missing both credential sources shows a clear alert without filling');
+
     const preview = await context.newPage();
     preview.on('pageerror', error => errors.push(error.message));
     const requestsBeforePreview = await worker.evaluate(() => __testRequests.length);

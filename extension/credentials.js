@@ -39,17 +39,16 @@
     if (results.length !== 1 || r.frameId !== 0 || r.documentId !== sender.documentId || r.result?.url !== sender.url) return null;
     return r.result;
   }
-  async function readForPage(chrome, sender, state, expectedUsername) {
+  async function readForPage(chrome, sender, state, expectedUsername, role = state?.site === 'mails' ? 'mail' : 'identity') {
     if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id) ||
       !sender.documentId || (sender.documentLifecycle && sender.documentLifecycle !== 'active') || !expectedUsername ||
       state?.status !== 'running' || state.expires <= Date.now() || state.steps.submit ||
-      !['form', 'mail-login'].includes(THU.kind(sender.url))) return failure('denied');
+      !['form', 'mail-login'].includes(THU.kind(sender.url)) || !roles.has(role) || (state.site !== 'mails' && role !== 'identity')) return failure('denied');
     try {
       const before = await inspect(chrome, sender, state, expectedUsername);
       if (!before) return failure('denied');
       if (THU.filling(before) === 'manual-input') return failure('manual-input');
       if (THU.filling(before) !== 'waiting-for-fill') return failure('denied');
-      const role = state.site === 'mails' ? 'mail' : 'identity';
       const result = await THUNative.call(chrome, {op: 'get', role});
       if (!result.ok) return result;
       if (typeof result.password !== 'string' || !result.password || typeof result.username !== 'string' ||
@@ -57,6 +56,10 @@
       const after = await inspect(chrome, sender, state, expectedUsername);
       const latest = (await chrome.storage.session.get(`tab:${sender.tab.id}`))[`tab:${sender.tab.id}`];
       if (!latest || latest.status !== 'running' || latest.expires !== state.expires || latest.steps.submit) return failure('changed-page');
+      const settings = await chrome.storage.local.get({username: '', mailUsername: '', automatic: false, siteAutomatic: {}});
+      const currentCredential = THU.credentialFor(state.site, settings);
+      if ((!state.manual && !THU.automaticAllowed(state.site, settings)) || currentCredential.role !== role ||
+        !sameAccount(currentCredential.username, expectedUsername, state.site)) return failure('changed-page');
       if (after && THU.filling(after) === 'manual-input') return failure('manual-input');
       if (state.expires <= Date.now() || !after || THU.filling(after) !== 'waiting-for-fill') return failure('changed-page');
       // Returned only to the initiating extension content script, never to a page message channel.

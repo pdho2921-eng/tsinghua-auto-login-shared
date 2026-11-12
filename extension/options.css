@@ -101,3 +101,9 @@ h3 { font-size: 14px; margin: 0 0 16px; font-weight: 600; }
 .copy-button { width: auto; gap: 4px; font-size: 12px; white-space: nowrap; }
 .usage-help summary, .usage-help .details-content, .close-hint { font-size: 13px; }
 .close-hint { margin-top: 21px; padding-top: 15px; border-top: 1px solid #f0eff5; color: var(--muted); }
+.mail-credential-hint { margin: -7px 0 16px; color: var(--muted); font-size: 13px; }
+.site-toggles { margin: 18px 0 0; padding: 0; border: 0; }
+.site-toggles legend { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+.site-toggle { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 0; font-size: 13px; cursor: pointer; }
+.site-toggle + .site-toggle { border-top: 1px solid #f0eff5; }
+#site-mode-result { margin-top: 12px; }

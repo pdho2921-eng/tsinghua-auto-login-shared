@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
-from package_shared import prepare_extension, privacy, update_checksums
+from package_shared import prepare_extension, privacy, update_checksums, copy_notices, package_notices
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build'
@@ -62,6 +62,7 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=BUILD) as temp:
         shutil.copy2(ROOT / name, package / name)
     shutil.copy2(ROOT / 'docs/MACOS.md', package / 'README.md')
     (package / 'PRIVACY.md').write_text(privacy('macos'))
+    copy_notices(package, 'macos')
     archive = Path(temp) / 'tsinghua-auto-login-shared-macos.zip'
     # Explicit UTF-8 filenames and POSIX mode bits, without Finder resource forks.
     with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as output:
@@ -71,6 +72,9 @@ with tempfile.TemporaryDirectory(prefix='package-', dir=BUILD) as temp:
     with zipfile.ZipFile(archive) as check:
         if check.testzip() is not None or any(n.endswith(('.exe', '.cs', '.ps1')) or 'HANDOFF_WINDOWS' in n for n in check.namelist()):
             raise ValueError('Invalid or mixed-platform Mac package')
+        for name, contents in package_notices('macos').items():
+            if check.read(f'{package.name}/{name}') != contents:
+                raise ValueError('Missing or changed Mac notice: ' + name)
     # Test the bytes recipients receive, including uninstall and reinstall, before publishing.
     environment = dict(os.environ, THU_TEST_HOST=str(BUILD / 'host'), THU_TEST_ARCHIVE=str(archive))
     subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'native_test.py', '-v'],

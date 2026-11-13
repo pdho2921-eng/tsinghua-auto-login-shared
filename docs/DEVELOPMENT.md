@@ -97,6 +97,10 @@ git diff --check
 
 Mac 的实际旧包升级回归使用 `THU_OLD_MAC_ARCHIVE=/path/to/old-macos.zip node tests/macos-upgrade.browser.cjs`。它在临时用户目录安装旧包，在隔离浏览器中开启开发者模式并加载扩展，保持工作页面打开后覆盖安装当前 Mac 包，再核对重新加载、固定身份及开关保留；不会修改日常浏览器资料。测试依赖的旧包留在忽略的测试目录，不随新包分发。
 
+`PRIVACY.md` 是双平台总说明，随包隐私说明分别维护在 `docs/PRIVACY_MACOS.md` 和 `docs/PRIVACY_WINDOWS.md`，构建时直接按平台读取。两包包含项目 LICENSE 和本平台适用的第三方材料；Windows 运行时版本与声明由 `licenses/dotnet-runtime/metadata.json` 记录，构建时核对实际依赖。
+
+两包构建完成后运行 `python3 scripts/check_distribution.py`，检查实际 ZIP、安装负载、许可原文、隐私说明、平台隔离和文件校验值。
+
 `dist/` 每个系统仅保留一份当前安装包，并维护两包的 SHA-256。中间文件放在忽略的 `build/`。不把私人数据库、账号、密码、机器配置或签名私钥纳入仓库或分发包。
 
 ## 资料
@@ -108,6 +112,6 @@ Mac 的实际旧包升级回归使用 `THU_OLD_MAC_ARCHIVE=/path/to/old-macos.zi
 - [Apple Developer ID](https://developer.apple.com/developer-id/)
 - [Apple 钥匙串应用访问规则](https://developer.apple.com/documentation/security/secaccesscreate(_:_:_:))
 
-前期已比较免费 THU Auto Login、Learn Helper、浏览器保存密码及 Bitwarden。现有资料未能确认其完整覆盖三个站点的失效重登；用户最终选择复用当前站点规则，新增精简系统助手。项目自身代码的公开许可证尚未决定；第三方图标的原有来源与许可文件随资源保留。
+前期已比较免费 THU Auto Login、Learn Helper、浏览器保存密码及 Bitwarden。现有资料未能确认其完整覆盖三个站点的失效重登；用户最终选择复用当前站点规则，新增精简系统助手。项目自身代码采用根目录的 MIT 许可证；第三方材料保留原有来源与许可，说明见 `THIRD_PARTY_NOTICES.md`。
 
 WEBVPN 流程参考：[学校双因素认证操作指南](https://its.tsinghua.edu.cn/1wzcycejdh_content.jsp?urltype=news.NewsContentUrl&wbnewsid=4000&wbtreeid=1771)。已有免费 THU Info 提供独立校园客户端，但不能直接完成当前浏览器原标签页的重登需求，因此本轮扩展既有规则，不新增软件或费用。

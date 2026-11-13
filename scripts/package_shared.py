@@ -73,14 +73,65 @@ def start_page(platform: str):
 
 
 def privacy(platform: str):
-    content = (ROOT / 'PRIVACY.md').read_text()
+    names = {'macos': 'PRIVACY_MACOS.md', 'windows': 'PRIVACY_WINDOWS.md'}
+    return (ROOT / 'docs' / names[platform]).read_text(encoding='utf-8')
+
+
+def dotnet_runtime():
+    directory = ROOT / 'licenses/dotnet-runtime'
+    metadata = json.loads((directory / 'metadata.json').read_text(encoding='utf-8'))
+    if metadata['package'] != 'Microsoft.NETCore.App.Runtime.win-x64' or not re.fullmatch(r'10\.0\.\d+', metadata['version']):
+        raise ValueError('Review the Windows runtime version and notices before building')
+    if set(metadata['files']) != {'LICENSE.TXT', 'THIRD-PARTY-NOTICES.TXT'}:
+        raise ValueError('Incomplete .NET runtime notices')
+    for name, digest in metadata['files'].items():
+        if hashlib.sha256((directory / name).read_bytes()).hexdigest() != digest:
+            raise ValueError('Changed .NET runtime notice: ' + name)
+    return metadata
+
+
+def verify_dotnet_runtime(build: Path, project: str):
+    metadata = dotnet_runtime()
+    source = build / 'nuget' / metadata['package'].lower() / metadata['version']
+    for name in metadata['files']:
+        if (source / name).read_bytes() != (ROOT / 'licenses/dotnet-runtime' / name).read_bytes():
+            raise ValueError('Runtime package and checked-in notices disagree: ' + name)
+    # Check the published dependency manifest, not just the requested build version.
+    deps = ROOT / f'native/windows/{project}/obj/Release/net10.0/win-x64/TsinghuaLogin{project}.deps.json'
+    libraries = json.loads(deps.read_text(encoding='utf-8'))['libraries']
+    expected = f'runtimepack.{metadata["package"]}/{metadata["version"]}'
+    runtime_libraries = [name for name in libraries if name.startswith('runtimepack.Microsoft.NETCore.App.Runtime.')]
+    if runtime_libraries != [expected]:
+        raise ValueError('Published runtime does not match the distributed notices')
+
+
+def package_notices(platform: str):
+    if platform not in ('macos', 'windows'):
+        raise ValueError(platform)
+    content = ('# 许可证与第三方材料\n\n'
+               '除另有说明的第三方材料外，本项目源代码采用 [MIT 许可证](LICENSE)。\n\n'
+               '网站图标来源见 [SITE-ICON-SOURCES.md](SITE-ICON-SOURCES.md)。'
+               '学校网站图标权益归原权利方，本项目的 MIT 许可证不包含对这些图标的额外授权。'
+               'Chromium 默认图标的完整许可见 [CHROMIUM-LICENSE.txt](CHROMIUM-LICENSE.txt)。\n')
+    files = {
+        'LICENSE': (ROOT / 'LICENSE').read_bytes(),
+        'SITE-ICON-SOURCES.md': (ROOT / 'extension/icons/sites/SOURCES.md').read_bytes(),
+        'CHROMIUM-LICENSE.txt': (ROOT / 'extension/icons/sites/CHROMIUM-LICENSE.txt').read_bytes(),
+    }
     if platform == 'windows':
-        content = content.replace('账号密码存入 macOS 登录钥匙串中的独立条目。',
-            '账号密码由 Windows 当前用户范围的 DPAPI 加密，分别保存到 `%LOCALAPPDATA%\\TsinghuaAutoLoginShared.Credentials.v1` 中的固定文件。目录仅授予当前用户与系统账户访问。重装系统、更换 Windows 账号或迁移电脑后，可能需要重新保存密码。')
-        content = content.replace('其他钥匙串服务名称', '其他凭据名称')
-        content = content.replace('默认登录 Mac 后可自动使用凭据。锁定钥匙串会导致自动读取停止；不要求每次读取均进行 Touch ID 验证。',
-            '登录当前 Windows 账号后可自动使用凭据，不要求每次读取均进行 Windows Hello 验证。系统加密不隔离已经取得当前 Windows 用户权限的其他程序。')
-    return content
+        metadata = dotnet_runtime()
+        content += (f'\nWindows 助手和安装程序自带 .NET {metadata["version"]} x64 运行时组件，无需另行安装。'
+                    '完整许可及第三方声明见 [DOTNET-LICENSE.txt](DOTNET-LICENSE.txt) 和 '
+                    '[DOTNET-THIRD-PARTY-NOTICES.txt](DOTNET-THIRD-PARTY-NOTICES.txt)。\n')
+        files['DOTNET-LICENSE.txt'] = (ROOT / 'licenses/dotnet-runtime/LICENSE.TXT').read_bytes()
+        files['DOTNET-THIRD-PARTY-NOTICES.txt'] = (ROOT / 'licenses/dotnet-runtime/THIRD-PARTY-NOTICES.TXT').read_bytes()
+    files['THIRD_PARTY_NOTICES.md'] = content.encode('utf-8')
+    return files
+
+
+def copy_notices(destination: Path, platform: str):
+    for name, contents in package_notices(platform).items():
+        (destination / name).write_bytes(contents)
 
 
 def update_checksums(dist: Path):

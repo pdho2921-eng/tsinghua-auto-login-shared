@@ -65,7 +65,7 @@ THU_TEST_EXTENSION="$PWD/build/windows/acceptance-payload/extension" node tests/
 5. Windows 的隔离虚拟学校页面回归，以及用户同意下的三个学校网站实测。
 6. 从同一个最终包覆盖安装、卸载、重复卸载、重装，确认凭据和已保存开关的保留规则。
 
-面向同学的简明步骤在 `docs/WINDOWS.md`，随 Windows 包作为 README 分发。正式签名、商店发布及项目公开许可证仍未完成。
+面向同学的简明步骤在 `docs/WINDOWS.md`，随 Windows 包作为 README 分发。项目代码已采用 MIT 许可证；正式签名及商店发布仍未完成。
 
 ## 代码签名与智能应用控制（2026-11-12 核查）
 
@@ -73,7 +73,7 @@ THU_TEST_EXTENSION="$PWD/build/windows/acceptance-payload/extension" node tests/
 
 | 路径 | 费用 | 用时与难度 | 当前限制 |
 | --- | --- | --- | --- |
-| SignPath Foundation | 合格开源项目免费 | 需准备公开源码、构建来源证明和签名流程，并等待审核；无确定获批时间 | 项目尚未选择公开许可证或公开仓库；公开发布及许可需要项目所有者决定，不能直接上传替其决定 |
+| SignPath Foundation | 合格开源项目免费 | 需准备公开源码、构建来源证明和签名流程，并等待审核；无确定获批时间 | 项目已选择 MIT 许可证，仓库公开发布仍由所有者完成；符合申请条件不代表已经获批 |
 | Microsoft Artifact Signing | Basic 约 9.99 美元/月，最多 5,000 次签名 | 需 Azure 付费订阅、实名验证和签名流程；完成身份审核后才能签名 | Public Trust 个人申请目前仅限美国、加拿大；若以中国大陆个人身份申请，当前不适用；Private Trust 不能代替公众信任签名 |
 | Microsoft Store 的 MSIX 路线 | Store 代签 MSIX 本身免费 | 需改造分发与安装方式、开发者注册和商店审核，工作量更大 | 当前 EXE 不能直接当作 MSIX 上传；通过 Store 分发 EXE 也仍要求发布者先签名 |
 | 传统 CA 代码签名 | 按证书、硬件或云签名服务报价 | 需要身份审核及安全密钥保管，通常有持续费用 | 未取得适合本项目、符合预算的报价，不作为当前主方案 |
@@ -92,3 +92,11 @@ THU_TEST_EXTENSION="$PWD/build/windows/acceptance-payload/extension" node tests/
 - [.NET 单文件发布](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview)
 - [.NET 自包含裁剪](https://learn.microsoft.com/en-us/dotnet/core/deploying/trimming/trim-self-contained)
 - [Native AOT 跨系统编译限制](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/cross-compile)
+
+## 随包许可与隐私说明
+
+`licenses/dotnet-runtime/metadata.json` 记录本次运行时版本 10.0.15、包名及两份许可原文的 SHA-256。发布助手和安装器时固定该运行时版本，再核对两者实际依赖清单及 NuGet 包内原文；不允许悄悄使用另一版本运行时配旧声明。升级时同步更新记录、原文和第三方材料说明。
+
+项目许可证、图标声明和 .NET 原文会在生成文件哈希清单之前加入安装负载，同时放入外层 ZIP，安装后仍可查阅。外层继续使用明确的文件白名单和校验值。Mac 包不包含 .NET 文件。
+
+Windows 随包隐私说明直接读取 `docs/PRIVACY_WINDOWS.md`，不再依赖对 Mac 文字进行字符串替换。两包构建完成后运行 `python3 scripts/check_distribution.py` 检查最终文件。

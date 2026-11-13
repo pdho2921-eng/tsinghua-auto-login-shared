@@ -8,11 +8,11 @@
 
 ## 从哪里继续
 
-- 共享版仓库：`/Users/pdho/Desktop/programs/plug-in/tsinghua-auto-login-shared`，独立 Git 仓库。先查看 `git status`、最近提交和本文，再读取 `docs/DEVELOPMENT.md`、`docs/VALIDATION.md`。
-- 原个人版：`/Users/pdho/Desktop/programs/plug-in/yuketang-login/tsinghua-auto-login`。用户要求保持原文件不变，文件指纹记录在共享版 `docs/source-baseline.json`。
+- 共享版仓库：当前目录（仓库根目录），独立 Git 仓库。先查看 `git status`、最近提交和本文，再读取 `docs/DEVELOPMENT.md`、`docs/VALIDATION.md`。
+- 原个人版：相邻项目 `../yuketang-login/tsinghua-auto-login`。用户要求保持原文件不变，文件指纹记录在共享版 `docs/source-baseline.json`。
 - 当前交付：扩展 **0.1.5**、Mac 助手 **0.1.3**、通信协议 **1**。三个数字含义不同，不要求扩展和助手版本相同。
 - 当前 Mac 安装包：`dist/tsinghua-auto-login-shared-macos.zip`，校验值见同目录 `SHA256SUMS.txt`。`dist` 和 `build` 不进 Git。旧 ISO 是手工生成的历史传输介质，不随 ZIP 更新。
-- 建议在同一仓库的新分支中开发，在 `native/windows/` 和 Windows 专用构建脚本中新增实现，继续共用 `extension/`。并行开发时使用独立 Git worktree，避免复制出多份失去同步的浏览器代码。跨系统工作时重新定位仓库，不依赖上述 Mac 绝对路径。
+- 建议在同一仓库的新分支中开发，在 `native/windows/` 和 Windows 专用构建脚本中新增实现，继续共用 `extension/`。并行开发时使用独立 Git worktree，避免复制出多份失去同步的浏览器代码。跨系统工作时重新定位仓库，不依赖开发者电脑的绝对路径。
 
 ## 用户已经确认的产品要求
 
@@ -98,7 +98,7 @@ HKCU\Software\Microsoft\Edge\NativeMessagingHosts\local.tsinghua_login_shared
 
 卸载默认保留账号密码，并在执行前说明如何删除；在设置页删除凭据是单独操作。重复安装、重复卸载和卸载后重装都应成功，不影响原个人版或其他程序。更新助手不得默默重置用户的自动登录开关。
 
-签名、商店发布和许可证均未完成。正式分发前需单独核对成本；用户接受的预算上限约为每月 10 美元或一次性 200 美元，超出范围不作为主要方案。不得关闭系统安全检查来消除安装提示。
+本交接记录形成时签名、商店发布和许可证尚未完成。当前项目已采用 MIT 许可证，许可材料见根目录 `LICENSE` 和 `THIRD_PARTY_NOTICES.md`；签名及商店发布仍未完成。正式分发前需单独核对成本；用户接受的预算上限约为每月 10 美元或一次性 200 美元，超出范围不作为主要方案。不得关闭系统安全检查来消除安装提示。
 
 ## 本次安装问题与避免重犯的方法
 
@@ -139,4 +139,4 @@ node tests/webvpn.browser.cjs
 git diff --check
 ```
 
-开发机需要 Apple Command Line Tools、Python 3、Node，以及 `playwright-core` 和测试 Chromium。接收者不需要这些工具。Mac 上当前可用的 Node 位于 `/Users/pdho/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node`，对应模块目录可用 `NODE_PATH` 指向；新环境应自行发现依赖路径，不能硬编码到产品。
+开发机需要 Apple Command Line Tools、Python 3、Node，以及 `playwright-core` 和测试 Chromium。接收者不需要这些工具。使用 `command -v node` 确认 Node 位置，必要时用 `NODE_PATH` 指向已安装的模块目录；新环境应自行发现依赖路径，不能硬编码到产品。

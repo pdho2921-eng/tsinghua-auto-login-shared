@@ -15,7 +15,8 @@ import subprocess
 import tempfile
 import zipfile
 
-from package_shared import ROOT, extension_manifest, prepare_extension, privacy, start_page, update_checksums
+from package_shared import (ROOT, extension_manifest, prepare_extension, privacy, start_page,
+                            update_checksums, copy_notices, package_notices, dotnet_runtime, verify_dotnet_runtime)
 
 
 def main():
@@ -37,6 +38,7 @@ def main():
     config = json.loads((ROOT / 'native/config.json').read_text())
     windows = json.loads((ROOT / 'native/windows/config.json').read_text())
     manifest = extension_manifest('windows')
+    runtime = dotnet_runtime()
     identity = ''.join(chr(97 + int(c, 16)) for c in hashlib.sha256(base64.b64decode(manifest['key'], validate=True)).hexdigest()[:32])
     if identity != config['extensionId']:
         raise ValueError('Extension public key and host allowlist do not match')
@@ -50,7 +52,9 @@ def main():
     def publish(project, output):
         run(dotnet, 'publish', f'native/windows/{project}/{project}.csproj', '-c', 'Release', '-r', 'win-x64',
             '--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true',
-            '-p:PublishTrimmed=true', '-p:EnableCompressionInSingleFile=true', '-o', str(output), '--nologo')
+            '-p:PublishTrimmed=true', '-p:EnableCompressionInSingleFile=true',
+            f'-p:RuntimeFrameworkVersion={runtime["version"]}', '-o', str(output), '--nologo')
+        verify_dotnet_runtime(build, project)
 
     publish('Host', build / 'host')
     with tempfile.TemporaryDirectory(prefix='candidate-', dir=build) as temp:
@@ -61,7 +65,8 @@ def main():
         if sorted(p.name for p in (payload / 'host').iterdir()) != ['TsinghuaLoginHost.exe']:
             raise ValueError('Unexpected host output: refuse an incomplete single-file package')
         (payload / '开始使用.html').write_text(start_page('windows'))
-        (payload / 'PRIVACY.md').write_text(privacy('windows'))
+        (payload / 'PRIVACY.md').write_bytes(privacy('windows').encode('utf-8'))
+        copy_notices(payload, 'windows')
         files = {p.relative_to(payload).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                  for p in sorted(payload.rglob('*')) if p.is_file()}
         metadata = dict(host=config['host'], extensionId=identity, protocol=config['protocol'], helperVersion=windows['version'],
@@ -79,8 +84,9 @@ def main():
         for name in ['安装.exe', '卸载.exe']:
             shutil.copy2(build / 'setup/TsinghuaLoginSetup.exe', package / name)
         shutil.copy2(ROOT / 'docs/WINDOWS.md', package / 'README.md')
-        (package / 'PRIVACY.md').write_text(privacy('windows'))
+        (package / 'PRIVACY.md').write_bytes(privacy('windows').encode('utf-8'))
         (package / '开始使用.html').write_text(start_page('windows'))
+        copy_notices(package, 'windows')
         (package / 'SHA256SUMS.txt').write_text(''.join(
             f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in sorted(package.iterdir())))
         candidate = temp / 'tsinghua-auto-login-shared-windows-x64-test.zip'
@@ -90,7 +96,8 @@ def main():
         with zipfile.ZipFile(candidate) as archive:
             if archive.testzip() is not None: raise ValueError('ZIP CRC failure')
             names = {Path(n).name for n in archive.namelist()}
-            if names != {'安装.exe', '卸载.exe', 'README.md', 'PRIVACY.md', '开始使用.html', 'SHA256SUMS.txt'}:
+            expected = {'安装.exe', '卸载.exe', 'README.md', 'PRIVACY.md', '开始使用.html', 'SHA256SUMS.txt'} | set(package_notices('windows'))
+            if names != expected:
                 raise ValueError('Wrong platform or extra files in Windows delivery')
             for p in package.iterdir():
                 if archive.read(f'{package.name}/{p.name}') != p.read_bytes(): raise ValueError('ZIP content mismatch')

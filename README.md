@@ -3,20 +3,30 @@
 ## 傻逼清华天天退出登录，你不会以为自己的网站特别安全吧？赶紧给爷去死。
 首次保存账号密码后，实现网络学堂、信息门户（含校外 WEBVPN）和学生邮箱登录失效后的原标签页自动重新登录。
 
-当前阶段：**初步完成版**（2026-11-12），适配 macOS, Windows 系统和 Chrome, Edge 浏览器。功能仅经过本人简单测试，很可能不够稳定，欢迎大家反馈。
+当前为初步完成版，提供 macOS 和 Windows 两份安装包。只简单测试过 Mac 上的 Chrome 和 Windows 11 上的 Edge，其他系统和浏览器组合还需要反馈。
 
 ## 选择安装包
 
-| 系统 | 安装包 | 使用说明 | 验证状态 |
+当前为初步完成版，只做过简单测试，很可能还有没遇到的问题，欢迎反馈。
+
+| 系统 | 安装包 | 使用说明 | 测试情况 |
 | --- | --- | --- | --- |
-| Mac | `dist/tsinghua-auto-login-shared-macos.zip` | [Mac 使用说明](docs/MACOS.md) | 实测了本人电脑和虚拟机上的 Chrome，Intel 芯片、旧版系统、Mac Edge 待实测反馈 |
-| Windows 11 x64 | `dist/tsinghua-auto-login-shared-windows-x64-test.zip` | [Windows 使用与测试说明](docs/WINDOWS.md) | 实测了 Windows 11 + Edge，Windows 10 以下及 Chrome 待实测反馈 |
+| Mac | [下载 Mac 安装包](https://github.com/pdho2921-eng/tsinghua-auto-login-shared/releases/download/v0.1.9-preview/tsinghua-auto-login-shared-macos.zip) | [Mac 使用说明](docs/MACOS.md) | 简单测试过本机和虚拟机上的 Chrome；Intel 芯片、旧版 macOS 和 Mac Edge 仍待反馈 |
+| Windows 11 x64 | [下载 Windows 安装包](https://github.com/pdho2921-eng/tsinghua-auto-login-shared/releases/download/v0.1.9-preview/tsinghua-auto-login-shared-windows-x64-test.zip) | [Windows 使用说明](docs/WINDOWS.md) | 简单测试过 Windows 11 + Edge；Windows 10 及以下版本、Windows Chrome 仍待反馈 |
 
-两份压缩包分别包含本系统适用的程序、安装卸载入口和使用说明，不包含开发文件或另一系统的安装文件。校验值在 `dist/SHA256SUMS.txt`。试验版本的 ISO 光盘和解压目录已移出 `dist`。
+解压后，Mac 运行 `安装.command`，Windows 运行 `安装.exe`，再按自动打开的说明加载扩展、检查连接并保存账号密码。
 
-Windows 测试时发现智能应用控制会因为未签名拦截安装程序的执行。[Windows README](docs/WINDOWS.md#智能应用控制拦截) 已补充可信签名说明、手动关闭入口、整机影响和恢复限制；本次文档更新没有使程序获得可信签名。
+已有旧版时，直接运行新包中的安装文件即可更新。完成后，在浏览器扩展管理页重新加载扩展，再刷新学校网站。更新保留已保存的密码和自动登录开关。
 
-Windows 扩展 **0.1.9**、助手 **0.1.2**；Mac 扩展 **0.1.8**、助手 **0.1.4**，通信协议均为 **1**。安装器均支持覆盖原共享版、保留账号密码。Windows 版额外实现旧目录不能移动时采用逐文件更新，并显示具体失败步骤与错误代码。
+两份安装包各自只包含本系统适用的文件。完整版本说明和文件校验值见[本次发布页](https://github.com/pdho2921-eng/tsinghua-auto-login-shared/releases/tag/v0.1.9-preview)。
+
+## 问题反馈
+
+使用时遇到问题，可以在 [Issues](https://github.com/pdho2921-eng/tsinghua-auto-login-shared/issues) 中新建反馈。
+
+请说明系统和浏览器版本、插件版本、出问题的网站，以及操作到哪一步失败。如果有提示，可以附上文字或截图；截图前遮住账号，不要发送密码、Cookie 或完整认证链接。
+
+到达验证码或二次验证页面后，需要本人继续操作，这种情况不算自动提交失败。
 
 ## 使用方式
 

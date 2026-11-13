@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a Windows x64 candidate on macOS or Windows; no recipient toolchain needed.
 
-The candidate is intentionally named 'test' until Windows/Edge acceptance is recorded.
+The 'test' archive name denotes a trial distribution with limited real-device coverage.
 Run with --dotnet /path/to/dotnet if the .NET 10 SDK is not on PATH.
 """
 import argparse
@@ -97,7 +97,7 @@ def main():
         dist = ROOT / 'dist'; dist.mkdir(exist_ok=True)
         os.replace(candidate, dist / candidate.name)
         update_checksums(dist)
-    print('Built Windows TEST candidate; Windows DPAPI, registry, installation and Edge acceptance are still required.')
+    print('Built Windows trial package. Build checks passed; real-device coverage is recorded separately in docs/VALIDATION.md.')
 
 
 if __name__ == '__main__':

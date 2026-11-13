@@ -255,9 +255,9 @@ func install(package: URL, home: URL) throws {
     if upgrading {
         print("已覆盖更新原共享版，账号密码和浏览器开关保留。")
         print("打开 chrome://extensions/，点击共享版的‘重新加载’，无需移除扩展或重新保存密码。")
-        print("关闭旧学校标签页后再测试。若钥匙串授权失效，请在设置页按提示处理。")
+        print("刷新原先打开的学校网站即可启用新版。若钥匙串授权失效，请在设置页按提示处理。")
     } else {
-        print("打开 chrome://extensions/，开启开发者模式，选择‘加载已解压的扩展程序’。")
+        print("打开 chrome://extensions/，开启开发者模式，选择‘加载未打包的扩展程序’。")
     }
     print("选择以下文件夹（选择窗口中可按 Command+Shift+G 后粘贴）：")
     print(destination.appendingPathComponent("extension").path)

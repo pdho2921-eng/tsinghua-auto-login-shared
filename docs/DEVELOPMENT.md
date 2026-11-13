@@ -1,6 +1,6 @@
 # 开发与后续兼容
 
-> 2026-11-12 更新：Windows 扩展 0.1.9，Mac 扩展 0.1.8。Mac 已按最新要求同步设置页登录启动与首次连接提示；两版覆盖更新检查与 Windows 目录占用更新修复见 [验收记录](VALIDATION.md) 和 [Windows 开发说明](WINDOWS_DEVELOPMENT.md)。原先“Windows 后续实现”等段落描述历史状态。Mac 与 Windows 安装包仅包含本系统用户文件，开发资料保留在仓库。
+当前为初步完成版：Windows 扩展 0.1.9、助手 0.1.2；Mac 扩展 0.1.8、助手 0.1.4。已在 Mac 本机及虚拟机的 Chrome、Windows 11 + Edge 上做过简单测试，具体范围见 [验收记录](VALIDATION.md)。两份安装包各自只包含本系统适用的文件，开发资料保留在仓库。
 
 ## 当前范围
 
@@ -72,9 +72,9 @@
 
 ## Windows 与 Edge
 
-浏览器代码采用 Chromium Manifest V3；Mac 安装器已生成 Edge 的独立连接配置。尚未进行 Edge 实机验收，不宣称已支持。
+浏览器代码采用 Chromium Manifest V3，两版共用网站规则和设置页。Windows 使用当前用户 DPAPI 保存凭据，独立安装器负责文件更新和 Chrome／Edge 的用户级连接配置；具体实现见 [Windows 开发说明](WINDOWS_DEVELOPMENT.md)。
 
-详细续接入口见仓库根目录 `HANDOFF_WINDOWS.md`。Windows 后续实现同一凭据协议，使用当前用户的系统凭据存储，并注册 Chrome／Edge 的用户级 Native Messaging 主机。系统凭据访问及安装程序需要单独实现；网页规则与设置页保持复用。Windows 启动参数还需处理浏览器传入的 `--parent-window`。不得直接复用 Mac 二进制或把未完成的 Windows 包列为可用版本。
+Windows 11 + Edge 已有简单实测，Windows Chrome、旧版 Windows 和 Mac Edge 仍待反馈。Mac 与 Windows 使用各自的原生助手和安装文件。仓库根目录 `HANDOFF_WINDOWS.md` 保留早期交接内容，当前功能与版本以本说明和验收记录为准。
 
 试用扩展 ID 来自 manifest 中公开的固定公钥，没有保存私钥。正式商店 ID 需要重新核对并更新助手允许来源；不能假定它与试用 ID 一致。
 

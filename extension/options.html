@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>清华网站自动重登 · 共享试用版</title>
+  <title>清华网站自动重登 · 试用版</title>
   <link rel="icon" href="icons/icon-32.png"><link rel="stylesheet" href="options.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
 <main class="page">
   <header class="masthead">
     <img class="brand-icon" src="icons/icon.svg" width="64" height="64" alt="">
-    <div><p class="eyebrow">共享试用版 · 首次设置</p><h1>清华网站自动重登</h1>
+    <div><p class="eyebrow">试用版 · 首次设置</p><h1>清华网站自动重登</h1>
     <p class="intro">保存一次账号密码，登录失效后自动重新登录并返回原网站。</p></div>
   </header>
   <ul class="sites" aria-label="支持的网站">
@@ -31,9 +31,9 @@
     <details class="details" id="install-help"><summary>尚未安装或连接失败</summary>
       <div class="details-content"><ol>
         <li data-platform="install-first">解压完整试用包，双击“安装.command”，等待显示安装完成。</li>
-        <li>回到本页点击“检查连接”。安装只需一次。</li>
+        <li>回到本页点击“检查连接”。更新后先在扩展管理页重新加载，再刷新学校网站。</li>
         <li data-platform="install-storage">如提示钥匙串锁定，请在 Mac 的“钥匙串访问”中解锁登录钥匙串；如刚更新助手，请重新保存密码。</li>
-      </ol><p data-platform="platform-support">试用阶段支持 Mac＋Chrome。Edge 的连接配置已预留，尚待实机验收。</p></div>
+      </ol><p data-platform="platform-support">已在 Mac 本机和虚拟机的 Chrome 上做过简单测试，Intel 芯片、旧版 macOS 和 Mac Edge 仍待实测反馈。</p></div>
     </details>
   </section>
   <section class="card" aria-labelledby="accounts-heading">
@@ -63,9 +63,9 @@
     </form>
   </section>
   <section class="card" aria-labelledby="use-heading">
-    <div class="section-heading"><h2 id="use-heading">3 · 开始使用</h2><p>保存所需账号后，刷新对应网站即可开始。</p></div>
+    <div class="section-heading"><h2 id="use-heading">3 · 开始使用</h2><p>保存账号后刷新学校网站，或点击下方“打开网站”启动一次登录。</p></div>
     <label class="toggle-row" for="automatic"><span class="toggle-copy"><strong>自动处理登录失效</strong>
-      <span>关闭后，可点击工具栏图标手动执行登录，右键图标选择‘选项’可返回本界面修改设置</span></span><input id="automatic" type="checkbox" role="switch"></label>
+      <span data-platform="manual-help">关闭后，仍可点击工具栏图标或下方“打开网站”手动登录。右键图标选择“选项”可返回设置页。</span></span><input id="automatic" type="checkbox" role="switch"></label>
     <p id="mode-result" class="feedback" role="status" aria-live="polite"></p>
     <fieldset class="site-toggles"><legend>各网站自动登录</legend>
       <label class="site-toggle" for="auto-learn"><span>网络学堂</span><input id="auto-learn" type="checkbox" role="switch" checked></label>
@@ -79,7 +79,7 @@
     <details class="details usage-help"><summary>密码修改、暂停与卸载</summary><div class="details-content">
       <p>密码修改后，在上方重新输入并保存。密码框不会回显已保存的密码。</p>
       <p>主动退出某个网站后，助手会暂停该网站的自动登录。点击工具栏图标可恢复。</p>
-      <p data-platform="uninstall-help">卸载前可点击上方“删除已保存密码”，再运行试用包中的“卸载.command”，最后在浏览器中移除扩展。</p>
+      <p data-platform="uninstall-help">如需卸载，先点击对应账号的“删除已保存密码”，再运行安装包中的“卸载.command”，最后在浏览器中移除扩展。只运行卸载会保留已保存的账号密码。</p>
       <p>密码不会写入浏览器设置、同步存储或日志。填写时，密码会经过本机助手和本扩展，进入对应学校登录页面。</p>
     </div></details>
     <p class="close-hint">完成账号保存后，可关闭当前标签页。助手会按当前设置运行。</p>

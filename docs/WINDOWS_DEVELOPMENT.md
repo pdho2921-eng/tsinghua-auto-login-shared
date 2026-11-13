@@ -2,9 +2,9 @@
 
 ## 已确定范围
 
-用户已确认 Windows 11、Intel x64、Edge；由同学在 Windows 电脑测试，用户转交安装包。采用当前用户 DPAPI，不缩小协议密码长度。保留现有设置页布局，仅替换必需的平台说明。Mac 与 Windows 分别分发，安装包仅含相应系统的文件。
+当前为初步完成版，面向 Windows 11、Intel／AMD x64 电脑。项目作者已在 README 记录 Windows 11 + Edge 的简单实测；Windows Chrome 和旧版 Windows 仍待反馈。采用当前用户 DPAPI，不缩小协议密码长度。设置页布局与 Mac 共用，平台说明分别生成。Mac 与 Windows 分别分发，安装包仅含相应系统的文件。
 
-Windows 助手版本与 Windows 扩展版本独立记录在 `native/windows/config.json`。`native/config.json` 仍记录共享主机名、扩展 ID、协议，以及 Mac 助手版本。当前 Windows 扩展 0.1.9、助手 0.1.2；Mac 扩展 0.1.8、助手 0.1.4，通信协议仍为 1。用户最新要求同步 Mac 的设置页登录入口，并检查两版升级行为；之前 0.1.7 仅改 Windows 的限制已被这次请求替代。
+Windows 助手版本与 Windows 扩展版本独立记录在 `native/windows/config.json`。`native/config.json` 记录共享主机名、扩展 ID、协议，以及 Mac 助手版本。当前 Windows 扩展 0.1.9、助手 0.1.2；Mac 扩展 0.1.8、助手 0.1.4，通信协议为 1。两版均支持从设置页打开网站并启动一次登录，以及保留账号密码的覆盖更新。
 
 从 0.1.8 起，两版设置页首次连接成功与手动检查成功都会显示浮动提示，保存／删除后的后台检查保持安静。三个网站链接发送受限的 `open-site` 请求，只允许设置页的精确来源和顶层页面使用，拒绝任意 URL 和非字符串的网站编号。后台先创建空白标签页并保存一次手动尝试，再导航到固定网站入口，避免快速重定向先遇到旧冷却状态。主动启动不修改自动开关、退出暂停或普通自动尝试的等待时间；不抢占其他标签页的提交占用。失败时清理空白标签页和状态，并向设置页明确返回错误。
 
@@ -35,7 +35,7 @@ Windows 0.1.2 针对实机截图“替换旧版本文件 / IOException / 8007000
 python3 scripts/build_windows.py --dotnet /path/to/dotnet
 ```
 
-脚本从同一份 `extension/` 生成 Windows 专用副本，生成常量、运行协议与事务检查、发布真实 x64 程序、校验内嵌负载与外层 ZIP。输出 `dist/tsinghua-auto-login-shared-windows-x64-test.zip`；文件名明确表明 Windows 实机验收待完成。Mac 仍运行 `python3 scripts/build.py`，输出独立 Mac ZIP。`scripts/package_shared.py` 负责按平台复制说明和维护两包校验值；安装包不包含开发文档、测试代码或另一系统的安装入口。
+脚本从同一份 `extension/` 生成 Windows 专用副本，生成常量、运行协议与事务检查、发布 x64 程序、校验内嵌负载与外层 ZIP。输出 `dist/tsinghua-auto-login-shared-windows-x64-test.zip`，文件名中的 `test` 表示试用分发，实测范围另见验收记录。Mac 运行 `python3 scripts/build.py`，输出独立 Mac ZIP。`scripts/package_shared.py` 负责按平台复制说明和维护两包校验值；安装包不包含开发文档、测试代码或另一系统的安装入口。
 
 ## 检查与证据边界
 
@@ -56,7 +56,7 @@ THU_TEST_EXTENSION="$PWD/build/windows/acceptance-payload/extension" node tests/
 
 前者在同一份浏览器状态中连续提交四次并逐次核对二次验证停止，后者检查 Windows 文案、版本与页面显示。测试只使用虚拟学校页面和虚拟凭据。
 
-生产助手只能在 Windows 上验证。Mac 上通过的协议测试、模拟注册表测试、PE 文件检查、Chromium 页面测试都不能替代以下验收：
+生产助手的系统接口需要在 Windows 上验证。README 中的简单实测没有提供以下各项的逐项结果；Mac 上通过的协议测试、模拟注册表测试、PE 文件检查、Chromium 页面测试也不能替代这些验收：
 
 1. 最终 ZIP 在新的 Windows 用户目录解压；记录系统提示、安装操作次数和时间。
 2. 真正的 DPAPI 保存、更新、读取、删除，以及目录权限和异常处理。

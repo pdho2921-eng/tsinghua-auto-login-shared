@@ -36,7 +36,8 @@ def prepare_extension(destination: Path, platform: str):
         replacements = {
             '解压完整试用包，双击“安装.command”，等待显示安装完成。': '解压完整试用包，双击“安装.exe”，等待显示安装完成。',
             '如提示钥匙串锁定，请在 Mac 的“钥匙串访问”中解锁登录钥匙串；如刚更新助手，请重新保存密码。': '如提示无法访问已保存凭据，请确认正在使用原 Windows 账号；必要时重新保存密码。',
-            '试用阶段支持 Mac＋Chrome。Edge 的连接配置已预留，尚待实机验收。': 'Windows 试用目标为 Windows 11（Intel／AMD 64 位）＋Edge；兼容性以实机验收结果为准。',
+            '已在 Mac 本机和虚拟机的 Chrome 上做过简单测试，Intel 芯片、旧版 macOS 和 Mac Edge 仍待实测反馈。': '已在 Windows 11＋Edge 上做过简单测试，Windows 10 及以下版本、Windows Chrome 仍待实测反馈。',
+            '右键图标选择“选项”': '右键图标选择“扩展选项”',
             '密码保存在这台 Mac 的登录钥匙串，登录 Mac 后可自动使用': '密码由 Windows 加密保存在这台电脑，登录当前 Windows 账号后可自动使用',
             '卸载.command': '卸载.exe'
         }
@@ -60,7 +61,8 @@ def start_page(platform: str):
             '在 Chrome 地址栏输入': '在 Edge 地址栏输入',
             'chrome://extensions/': 'edge://extensions/',
             '在右上角选择开启“开发者模式”': '在扩展管理页开启“开发人员模式”',
-            '加载已解压的扩展程序': '加载解压缩的扩展',
+            '加载未打包的扩展程序': '加载解压缩的扩展',
+            '右键图标选择“选项”': '右键图标选择“扩展选项”',
             '若找不到，在选择窗口按 Command＋Shift＋G，粘贴：': '若找不到，在选择窗口的地址栏粘贴：',
             '~/Library/Application Support/TsinghuaAutoLoginShared/extension': r'%LOCALAPPDATA%\TsinghuaAutoLoginShared\extension'
         }.items():

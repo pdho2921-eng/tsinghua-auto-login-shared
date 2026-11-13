@@ -1,5 +1,7 @@
 # 清华网站自动重登 Windows 版开发交接
 
+> 本文保留 Windows 开发前的交接内容。当前已交付 Mac 与 Windows 初步完成版，版本、使用方式和实测范围请查看 [README](README.md)、[Windows 开发说明](docs/WINDOWS_DEVELOPMENT.md) 和 [验收记录](docs/VALIDATION.md)。
+
 > 后续进展（2026-11-12）：Windows 11 x64／Edge 的开发已启动，采用 C# 自包含发布与当前用户 DPAPI。当前实现和未完成的实机验收见 [Windows 开发说明](docs/WINDOWS_DEVELOPMENT.md)。下文保留原交接时点的状态，不能作为最新实现清单。
 
 交接日期：2026-11-12。当前项目已完成 Mac 共享试用版；下一对话的目标是复用浏览器扩展，实现 Windows 本机助手与安装包。这里记录已确认的需求、现有代码和验收要求；Windows 方案尚未实现，不能把 Mac 测试结果当作 Windows 支持证明。

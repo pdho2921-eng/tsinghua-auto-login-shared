@@ -53,7 +53,7 @@ internal static class Program
                     if (!quiet)
                     {
                         string next = upgrading
-                            ? "已覆盖更新原共享版，账号密码和浏览器开关保留。\n\n请在 Edge 扩展管理页重新加载共享版；若刚才关闭了扩展开关，请重新开启。关闭旧学校标签页再测试，无需重新保存密码。"
+                            ? "已覆盖更新原共享版，账号密码和浏览器开关保留。\n\n请在 Edge 扩展管理页重新加载本扩展；若刚才关闭了扩展开关，请重新开启。刷新原先打开的学校网站即可启用新版，无需重新保存密码。"
                             : "接下来请按“开始使用”说明，在 Edge 加载 extension 文件夹，再保存账号密码。";
                         MessageBoxW(0, "安装完成。\n\n" + next + "\n\n扩展版本 " + BuildInfo.ExtensionVersion + "，助手版本 " + BuildInfo.Version + "。", Title, 0x40);
                         try { Open(Path.Combine(destination, "开始使用.html")); Open(Path.Combine(destination, "extension")); }
